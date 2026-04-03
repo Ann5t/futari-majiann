@@ -1,5 +1,8 @@
 FROM python:3.12-slim
 
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+
 WORKDIR /app
 
 COPY backend/requirements.txt .
