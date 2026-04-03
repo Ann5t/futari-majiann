@@ -695,6 +695,7 @@ async def _build_controlled_phase2_engine():
     declarer_closed = _alloc_named_tiles(['1m', '2m', '3m', '1p', '2p', '3p', '1s', '2s', '3s', '东', '东', '东', '5m'], used)
     guesser_closed = _alloc_named_tiles(['7m', '8m', '9m', '4p', '5p', '6p', '4s', '5s', '6s', '南', '南', '白', '白'], used)
     wall_sequence = _alloc_named_tiles(['9p', '9s', '北', '中', '7p', '5m'], used)
+    dead_wall = _alloc_named_tiles(['2m', '4m', '6m', '8m', '6p', '西', '发', '中', '9m', '2s', '8s', '3p', '7p', '南'], used)
 
     engine.players[0].hand.init_deal(declarer_closed)
     engine.players[1].hand.init_deal(guesser_closed)
@@ -706,6 +707,8 @@ async def _build_controlled_phase2_engine():
     engine.current_turn = 0
     engine.phase2_draw_count = 0
     engine.wall.tiles = wall_sequence
+    engine.wall.dead_wall = dead_wall
+    engine.wall.dora_indicators = [dead_wall[4]]
 
     return engine, events
 
@@ -749,6 +752,7 @@ async def _build_phase2_winning_draw_engine():
     declarer_closed = _alloc_named_tiles(['1m', '2m', '3m', '4p', '5p', '6p', '7s', '8s', '9s', '东', '东', '2m', '3m'], used)
     guesser_closed = _alloc_named_tiles(['7m', '8m', '9m', '4p', '5p', '6p', '4s', '5s', '6s', '南', '南', '白', '白'], used)
     wall_sequence = _alloc_named_tiles(['1m', '9p'], used)
+    dead_wall = _alloc_named_tiles(['2p', '4p', '6p', '8p', '6s', '西', '发', '中', '9m', '3s', '8s', '1p', '7p', '北'], used)
 
     engine.players[0].hand.init_deal(declarer_closed)
     engine.players[1].hand.init_deal(guesser_closed)
@@ -761,6 +765,8 @@ async def _build_phase2_winning_draw_engine():
     engine.current_turn = 0
     engine.phase2_draw_count = 0
     engine.wall.tiles = wall_sequence
+    engine.wall.dead_wall = dead_wall
+    engine.wall.dora_indicators = [dead_wall[4]]
 
     return engine, events
 
@@ -789,7 +795,7 @@ def test_phase2_winning_draw_requires_manual_choice():
 
 
 async def _run_phase2_tsumo_action_works_after_manual_choice_prompt():
-    engine, _events = await _build_phase2_winning_draw_engine()
+    engine, events = await _build_phase2_winning_draw_engine()
 
     await engine.phase2_next_draw(0)
     await engine.action_tsumo(0)
@@ -799,9 +805,44 @@ async def _run_phase2_tsumo_action_works_after_manual_choice_prompt():
     assert engine.round_result.result_type == 'tsumo'
     assert engine.round_result.winner == 0
 
+    round_result_events = [event for event in events if event[0] == 'round_result']
+    assert round_result_events
+    payload = round_result_events[-1][1]
+    assert payload['dora_indicators'] == engine.wall.dora_indicators
+    assert payload['uradora_indicators'] == engine.wall.get_uradora_indicators()
+
 
 def test_phase2_tsumo_action_works_after_manual_choice_prompt():
     asyncio.run(_run_phase2_tsumo_action_works_after_manual_choice_prompt())
+
+
+async def _run_phase2_guess_hit_is_zero_point_draw_and_reveals_indicators():
+    engine, events = await _build_controlled_phase2_engine()
+    engine.players[0].declared_riichi = True
+    engine.phase = Phase.PHASE2_GUESS
+    engine.current_turn = 1
+
+    await engine.phase2_guess(1, [tile_type_from_str('5m'), tile_type_from_str('2m')])
+
+    assert engine.phase == Phase.ROUND_END
+    assert engine.round_result is not None
+    assert engine.round_result.result_type == 'draw'
+    assert engine.round_result.points_delta == {0: 0, 1: 0}
+    assert engine.players[0].points == 25000
+    assert engine.players[1].points == 25000
+    assert engine.round_result.details['reason'] == 'phase2_guess_hit'
+
+    round_result_events = [event for event in events if event[0] == 'round_result']
+    assert round_result_events
+    payload = round_result_events[-1][1]
+    assert payload['reason'] == 'phase2_guess_hit'
+    assert payload['dora_indicators'] == engine.wall.dora_indicators
+    assert payload['uradora_indicators'] == engine.wall.get_uradora_indicators()
+    assert payload['points_delta'] == {0: 0, 1: 0}
+
+
+def test_phase2_guess_hit_is_zero_point_draw_and_reveals_indicators():
+    asyncio.run(_run_phase2_guess_hit_is_zero_point_draw_and_reveals_indicators())
 
 
 async def _run_phase2_declined_winning_tile_is_hidden_and_sets_furiten():
@@ -1117,7 +1158,7 @@ async def _run_waiting_disconnect_clears_ghost_ready():
     room.engine.phase = Phase.ROUND_END
     room.engine._ready = {0, 1}
     room.remove_player(2)
-    assert room.engine._ready == {0}
+    assert room.engine._ready == {0, 1}
 
 
 def test_waiting_disconnect_clears_ghost_ready():

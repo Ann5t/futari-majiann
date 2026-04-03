@@ -1644,10 +1644,18 @@ input:focus { outline: none; border-color: var(--gold); }
 }
 .result-dora {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
   margin: 4px 0 10px;
+}
+.result-dora-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 .result-dora-label {
   font-size: 12px;

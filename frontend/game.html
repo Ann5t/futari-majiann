@@ -1103,6 +1103,40 @@ function appendResultHand(container, handData, winningTile = null) {
   }
 }
 
+function renderResultIndicators(container, doraIndicators = [], uradoraIndicators = []) {
+  container.innerHTML = '';
+  container.style.display = 'none';
+
+  const sections = [];
+  if (Array.isArray(doraIndicators) && doraIndicators.length > 0) {
+    sections.push({ label: '宝牌指示牌', tiles: doraIndicators });
+  }
+  if (Array.isArray(uradoraIndicators) && uradoraIndicators.length > 0) {
+    sections.push({ label: '里宝牌指示牌', tiles: uradoraIndicators });
+  }
+
+  if (sections.length === 0) {
+    return;
+  }
+
+  container.style.display = 'flex';
+  for (const section of sections) {
+    const row = document.createElement('div');
+    row.className = 'result-dora-row';
+
+    const label = document.createElement('span');
+    label.className = 'result-dora-label';
+    label.textContent = section.label;
+    row.appendChild(label);
+
+    for (const tile of section.tiles) {
+      row.appendChild(createTileElement(tile, { size: 'small' }));
+    }
+
+    container.appendChild(row);
+  }
+}
+
 function onRoundResult(msg) {
   state.phase = 'round_end';
   state.currentTurn = -1;
@@ -1136,6 +1170,10 @@ function onRoundResult(msg) {
   yakuList.innerHTML = '';
   resetResultRevealStages();
 
+  const resultDoraIndicators = msg.dora_indicators || state.doraIndicators || [];
+  const resultUradoraIndicators = msg.uradora_indicators || msg.score?.uradora_indicators || [];
+  renderResultIndicators(dora, resultDoraIndicators, resultUradoraIndicators);
+
   const oldMyPoints = state.myPoints;
   const oldOppPoints = state.oppPoints;
   const myNewPts = msg.points?.[state.mySeat] ?? oldMyPoints;
@@ -1154,19 +1192,6 @@ function onRoundResult(msg) {
 
     // Show winning hand
     appendResultHand(hand, msg.hand, msg.win_tile);
-
-    // Optional ura-dora display (if backend includes it)
-    const uradora = msg.score?.uradora_indicators || [];
-    if (uradora.length > 0) {
-      dora.style.display = 'flex';
-      const label = document.createElement('span');
-      label.className = 'result-dora-label';
-      label.textContent = '里宝牌';
-      dora.appendChild(label);
-      for (const t of uradora) {
-        dora.appendChild(createTileElement(t, { size: 'small' }));
-      }
-    }
 
     // Yaku list with han count [U6]
     if (msg.score && msg.score.yaku) {

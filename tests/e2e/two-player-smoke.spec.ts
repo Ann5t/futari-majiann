@@ -529,10 +529,8 @@ test('双端对战冒烟：进入对局并完成至少两次打牌', async ({ br
 
   await discardFirstClickableTile(secondTurn.activePage);
 
-  await expect.poll(async () => {
-    const snapshot = await getClientSnapshot(p1);
-    return snapshot.totalDiscards;
-  }, { timeout: 15_000 }).toBeGreaterThanOrEqual(initialTotalDiscards + 2);
+  const thirdTurn = await waitForActionTurn(p1, p2, initialTotalDiscards + 2);
+  expect(thirdTurn.totalDiscards).toBeGreaterThanOrEqual(initialTotalDiscards + 2);
 
   await ctx1.close();
   await ctx2.close();
@@ -1070,7 +1068,7 @@ test('Phase2 完整链路：猜错后自摸结算并进入下一局', async ({ b
     return snapshot.phase;
   }, { timeout: 15_000 }).toBe('phase2_action');
 
-  await expect(declarerPage.locator('#phase2Info')).toHaveText('请选择打牌或开杠');
+  await expect(declarerPage.locator('#phase2Info')).toHaveText('请选择打出当前摸牌或开杠');
   await finishPhase2DrawSequenceByDiscardingDrawTile(declarerPage, 5);
 
   await expect(guesserPage.locator('#guessPanel')).toBeVisible();
@@ -1081,6 +1079,13 @@ test('Phase2 完整链路：猜错后自摸结算并进入下一局', async ({ b
   await guesserPage.locator('#guessTiles .tile[data-tile-type="2"]').click();
   await guesserPage.locator('#guessTiles .tile[data-tile-type="11"]').click();
   await guesserPage.locator('#guessConfirm').click();
+
+  await expect.poll(async () => {
+    const snapshot = await getClientSnapshot(declarerPage);
+    return snapshot.phase;
+  }, { timeout: 15_000 }).toBe('phase2_action');
+  await expect(declarerPage.locator('#btnTsumo')).toBeVisible({ timeout: 15_000 });
+  await declarerPage.locator('#btnTsumo').click();
 
   await Promise.all([
     expect(declarerPage.locator('#resultOverlay')).toBeVisible({ timeout: 15_000 }),
@@ -1204,13 +1209,17 @@ test('Phase2 完整链路：猜中听牌流局并进入下一局', async ({ brow
   await expect(guesserPage.locator('#resultHand')).toContainText('听牌手牌已公开');
   await expect(declarerPage.locator('#resultYaku')).toContainText('被猜中者');
   await expect(guesserPage.locator('#resultYaku')).toContainText('被猜中者');
+  await expect(declarerPage.locator('#resultDora')).toBeVisible();
+  await expect(guesserPage.locator('#resultDora')).toBeVisible();
+  await expect(declarerPage.locator('#resultDora')).toContainText('宝牌指示牌');
+  await expect(guesserPage.locator('#resultDora')).toContainText('宝牌指示牌');
 
   const [resultDeclarerState, resultGuesserState] = await Promise.all([
     getClientSnapshot(declarerPage),
     getClientSnapshot(guesserPage),
   ]);
-  expect(resultDeclarerState.myPoints).toBe(22000);
-  expect(resultGuesserState.myPoints).toBe(28000);
+  expect(resultDeclarerState.myPoints).toBe(25000);
+  expect(resultGuesserState.myPoints).toBe(25000);
 
   await guesserPage.locator('#resultContinue').click();
   await expect(guesserPage.locator('#roundReadyBar')).toBeVisible();

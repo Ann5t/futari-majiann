@@ -1568,6 +1568,8 @@ class GameEngine:
             "win_tile": win_tile,
             "hand": winner.hand.to_dict(),
             "score": score.to_dict(),
+            "dora_indicators": self.wall.dora_indicators,
+            "uradora_indicators": self.wall.get_uradora_indicators() if winner.declared_riichi else [],
             "points_transfer": total_transfer,
             "points_delta": self.round_result.points_delta,
             "honba_count": self.honba_count,
@@ -1606,6 +1608,8 @@ class GameEngine:
         nagashi_points_transfer = 0
         nagashi_honba_bonus = 0
         nagashi_riichi_bonus = 0
+        draw_dora_indicators = list(self.wall.dora_indicators)
+        draw_uradora_indicators = self.wall.get_uradora_indicators() if any(player.declared_riichi for player in self.players) else []
 
         if reason == "exhaustive":
             nagashi_scores: dict[int, ScoreResult] = {}
@@ -1650,11 +1654,8 @@ class GameEngine:
                 reason = "nagashi_mangan"
 
         if reason == "phase2_guess_hit":
-            # Guess hit: declarer is penalized 3000 points to the guesser
+            # Guess hit: round ends in an immediate draw with no point exchange.
             declarer_seat = self.tenpai_declarer
-            guesser_seat = self.opponent_seat(declarer_seat)
-            delta[declarer_seat] = -3000
-            delta[guesser_seat] = 3000
             p0_tenpai = self.players[0].declared_tenpai or self._safe_is_tenpai(p0.hand)
             p1_tenpai = self.players[1].declared_tenpai or self._safe_is_tenpai(p1.hand)
             revealed_seat = declarer_seat
@@ -1695,6 +1696,8 @@ class GameEngine:
                 "points_transfer": nagashi_points_transfer,
                 "honba_bonus": nagashi_honba_bonus,
                 "riichi_bonus": nagashi_riichi_bonus,
+                "dora_indicators": draw_dora_indicators,
+                "uradora_indicators": draw_uradora_indicators,
             },
         )
 
@@ -1714,6 +1717,8 @@ class GameEngine:
             "winner": nagashi_winner_seat,
             "winner_name": self.players[nagashi_winner_seat].username if nagashi_winner_seat is not None else None,
             "score": nagashi_score.to_dict() if nagashi_score else None,
+            "dora_indicators": draw_dora_indicators,
+            "uradora_indicators": draw_uradora_indicators,
             "points_transfer": nagashi_points_transfer,
             "honba_bonus": nagashi_honba_bonus,
             "riichi_bonus": nagashi_riichi_bonus,

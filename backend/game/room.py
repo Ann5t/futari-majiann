@@ -54,7 +54,8 @@ class Room:
         if seat is not None:
             self.player_sockets.pop(seat, None)
             self.ready_seats.discard(seat)
-            self.engine._ready.discard(seat)
+            if self.engine.phase == Phase.WAITING:
+                self.engine._ready.discard(seat)
 
     def leave_player(self, user_id: int) -> bool:
         """Leave room before game start. Returns True if left, False if not allowed."""
