@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 140" role="img" aria-label="0m">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.5" stop-color="#f8f9fc"/>
+      <stop offset="1" stop-color="#e8edf5"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="rgba(255,255,255,0.72)"/>
+      <stop offset="1" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+    <radialGradient id="seal" cx="50%" cy="40%" r="62%">
+      <stop offset="0" stop-color="#fff0ea"/>
+      <stop offset="0.42" stop-color="#ee8473"/>
+      <stop offset="1" stop-color="#a1221f"/>
+    </radialGradient>
+  </defs>
+  <rect x="2" y="2" width="96" height="136" rx="10" fill="url(#bg)" stroke="#d8dee8" stroke-width="2"/>
+  <rect x="8" y="8" width="84" height="42" rx="8" fill="url(#gloss)"/>
+
+  <circle cx="50" cy="38" r="12" fill="url(#seal)" opacity="0.18"/>
+  <path d="M28 28h10l3 5 9-3 9 3 3-5h10l-5 10 5 10H65l-6-4-9 3-9-3-6 4H23l5-10z" fill="#c7a35a" opacity="0.28"/>
+  <text x="50" y="76" text-anchor="middle" font-size="54" font-weight="900" fill="#ba2226" stroke="rgba(112,22,24,0.1)" stroke-width="0.45" paint-order="stroke fill" font-family="Noto Serif SC, serif">五</text>
+  <text x="50" y="106" text-anchor="middle" font-size="19" font-weight="900" fill="#cb4145" font-family="Noto Serif SC, serif">萬</text>
+  <circle cx="50" cy="118" r="6" fill="#c6a157" opacity="0.34"/>
+  <text x="50" y="120.8" text-anchor="middle" font-size="7.5" font-weight="800" fill="#97231f" font-family="Noto Serif SC, serif">赤</text>
+</svg>

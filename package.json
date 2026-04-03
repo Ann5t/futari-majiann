@@ -1,0 +1,15 @@
+{
+  "name": "futari-majiann-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "E2E tests for futari-majiann",
+  "scripts": {
+    "test:e2e": "sh tests/e2e/run-with-test-hooks.sh",
+    "test:e2e:phase2": "sh tests/e2e/run-with-test-hooks.sh --grep '(Phase2|Round end)'",
+    "test:e2e:headed": "sh tests/e2e/run-with-test-hooks.sh --headed",
+    "test:e2e:ui": "sh tests/e2e/run-with-test-hooks.sh --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}

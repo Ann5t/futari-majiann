@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "model": "image-01",
+  "prompt": "Create one original Japanese riichi mahjong tile sprite sheet with exactly 34 unique tile faces. Use a strict 6x6 grid layout, fill the first 34 cells left-to-right top-to-bottom, leave the last 2 cells empty. Front view only, no perspective, no tilt, no overlap, equal spacing, consistent framing, plain neutral background. Premium modern riichi mahjong look, highly readable symbols, cold white ceramic tile surfaces, restrained highlights, original design not based on any existing game, no watermark, no extra props, no hands, no table.",
+  "image_url": "https://hailuo-image-algeng-data.oss-cn-wulanchabu.aliyuncs.com/image_inference_output%2Ftalkie%2Fprod%2Fimg%2F2026-04-03%2F524f3cf5-16eb-4044-b9c8-d63184d5949b_aigc.jpeg?Expires=1775303220&OSSAccessKeyId=LTAI5tB2SwrRwAtD23etQUbC&Signature=HVr8QZGus1LBA4%2BPqhqgZttsYJA%3D",
+  "file_path": "generated/tilesheets/minimax_tilesheet.jpg",
+  "request_id": "061edba5ddd5952bbfb4fc1d38a4a996",
+  "raw_response": {
+    "id": "061edba5ddd5952bbfb4fc1d38a4a996",
+    "data": {
+      "image_urls": [
+        "https://hailuo-image-algeng-data.oss-cn-wulanchabu.aliyuncs.com/image_inference_output%2Ftalkie%2Fprod%2Fimg%2F2026-04-03%2F524f3cf5-16eb-4044-b9c8-d63184d5949b_aigc.jpeg?Expires=1775303220&OSSAccessKeyId=LTAI5tB2SwrRwAtD23etQUbC&Signature=HVr8QZGus1LBA4%2BPqhqgZttsYJA%3D"
+      ]
+    },
+    "metadata": {
+      "failed_count": "0",
+      "success_count": "1"
+    },
+    "base_resp": {
+      "status_code": 0,
+      "status_msg": "success"
+    }
+  }
+}

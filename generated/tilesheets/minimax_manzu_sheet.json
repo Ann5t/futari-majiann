@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "model": "image-01",
+  "prompt": "Create a 3x3 sprite sheet of Japanese riichi mahjong manzu tiles only: 1m 2m 3m on row 1, 4m 5m 6m on row 2, 7m 8m 9m on row 3. Each tile front-facing, same size, centered, no perspective, plain background, original polished style, clear red kanji numerals 一二三四五六七八九 with a smaller red 萬 below each numeral, no other text, no watermark, no extra objects.",
+  "image_url": "https://hailuo-image-algeng-data.oss-cn-wulanchabu.aliyuncs.com/image_inference_output%2Ftalkie%2Fprod%2Fimg%2F2026-04-03%2F00e1e64b-ff2c-43de-a24d-911892067f8a_aigc.jpeg?Expires=1775303323&OSSAccessKeyId=LTAI5tB2SwrRwAtD23etQUbC&Signature=v7npAygm%2FJGk1M%2BRJHdZeLb0Vtw%3D",
+  "file_path": "generated/tilesheets/minimax_manzu_sheet.jpg",
+  "request_id": "061edc0a13f58eb363fbd8d32dbd4684",
+  "raw_response": {
+    "id": "061edc0a13f58eb363fbd8d32dbd4684",
+    "data": {
+      "image_urls": [
+        "https://hailuo-image-algeng-data.oss-cn-wulanchabu.aliyuncs.com/image_inference_output%2Ftalkie%2Fprod%2Fimg%2F2026-04-03%2F00e1e64b-ff2c-43de-a24d-911892067f8a_aigc.jpeg?Expires=1775303323&OSSAccessKeyId=LTAI5tB2SwrRwAtD23etQUbC&Signature=v7npAygm%2FJGk1M%2BRJHdZeLb0Vtw%3D"
+      ]
+    },
+    "metadata": {
+      "failed_count": "0",
+      "success_count": "1"
+    },
+    "base_resp": {
+      "status_code": 0,
+      "status_msg": "success"
+    }
+  }
+}

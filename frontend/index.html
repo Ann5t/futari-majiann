@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>二人麻雀 - 登录</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-box">
+      <h1>🀄 二人麻雀</h1>
+      <p class="subtitle">天和街浪子规则</p>
+      <div class="field">
+        <label for="username">用户名</label>
+        <input type="text" id="username" autocomplete="username" autofocus>
+      </div>
+      <div class="field">
+        <label for="password">密码</label>
+        <input type="password" id="password" autocomplete="current-password">
+      </div>
+      <div class="error" id="error"></div>
+      <button class="btn-primary" id="loginBtn" onclick="doLogin()">登录</button>
+    </div>
+  </div>
+  <script>
+    // If already logged in, redirect
+    if (sessionStorage.getItem('token')) {
+      window.location.href = '/lobby';
+    }
+
+    document.getElementById('password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+
+    async function doLogin() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('error');
+      errorEl.textContent = '';
+
+      if (!username || !password) {
+        errorEl.textContent = '请输入用户名和密码';
+        return;
+      }
+
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          errorEl.textContent = data.detail || '登录失败';
+          return;
+        }
+        const data = await res.json();
+        sessionStorage.setItem('token', data.token);
+        sessionStorage.setItem('username', data.username);
+        window.location.href = '/lobby';
+      } catch (e) {
+        errorEl.textContent = '无法连接服务器';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

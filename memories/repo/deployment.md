@@ -1,0 +1,3 @@
+- 对局页 HTML 由 backend/main.py 的 FileResponse 提供，修改 frontend/*.html 后需要重建 app 容器才能生效。
+- /static/ 目前走 nginx 反向代理到 backend/main.py 中的 FastAPI StaticFiles；但 app 镜像是通过 Dockerfile 直接 COPY frontend/ 目录，不是实时挂载，所以修改 frontend/css、frontend/js、frontend/assets 后也需要重建 app 镜像才能对外生效。
+- 当前环境下不要在 nginx 的 server 级单独接管 /static 并重写 types，曾出现 CSS/JS 被返回为 application/octet-stream 的问题。

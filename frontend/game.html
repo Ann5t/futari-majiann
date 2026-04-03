@@ -1,0 +1,2294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>二人麻雀 - 对局</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=20260403v">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">
+  <script src="/static/js/tiles-render.js?v=20260403v"></script>
+  <script src="/static/js/audio-manager.js?v=20260403v"></script>
+</head>
+<body>
+
+<div class="game-container" id="app">
+
+  <button class="btn-secondary" id="btnLeaveWaitingRoom" onclick="leaveWaitingRoom()" style="display:none;position:absolute;top:10px;right:10px;z-index:20;">退出房间</button>
+
+  <!-- Opponent area (top) -->
+  <div class="opponent-area">
+    <div class="opponent-info">
+      <span class="name" id="oppName">对手</span>
+      <span class="points" id="oppPoints">25000</span>
+      <span class="tenpai-badge" id="oppTenpai" style="display:none">听牌</span>
+      <span class="dealer-badge" id="oppDealer" style="display:none">庄</span>
+    </div>
+    <div class="meld-zone opponent-meld-zone">
+      <div class="meld-zone-label">对手副露</div>
+      <div id="oppMelds" class="opponent-melds"></div>
+    </div>
+  </div>
+  <div class="opponent-tiles" id="oppTiles"></div>
+
+  <!-- Center area -->
+  <div class="center-area">
+    <div class="room-ready-bar" id="roomReadyBar" style="display:none;">
+      <div class="room-ready-text" id="roomReadyText">等待玩家加入...</div>
+      <div class="room-ready-actions">
+        <button class="btn-primary" id="btnRoomReady" onclick="setRoomReady(true)">准备</button>
+        <button class="btn-secondary" id="btnRoomUnready" onclick="setRoomReady(false)" style="display:none;">取消准备</button>
+        <button class="btn-secondary" onclick="leaveWaitingRoom()">退出房间</button>
+      </div>
+    </div>
+
+    <div class="table-console">
+      <div class="game-info-bar">
+        <span class="round" id="roundInfo">第1局</span>
+          <span class="bonus-pill" id="honbaInfo">本场: 0</span>
+          <span class="bonus-pill" id="riichiStickInfo">立直棒: 0</span>
+        <span class="wall-count" id="wallCount">余牌: 122</span>
+        <span class="timer" id="timer">30:00</span>
+      </div>
+
+      <div class="audio-controls audio-controls-game" id="audioControls">
+        <button class="btn-secondary audio-toggle" id="audioMuteToggle" type="button">声音开</button>
+        <label class="audio-slider">SE
+          <input type="range" id="audioSeVolume" min="0" max="100" step="5">
+        </label>
+        <label class="audio-slider">BGM
+          <input type="range" id="audioBgmVolume" min="0" max="100" step="5">
+        </label>
+        <span class="audio-status" id="audioStatus">待启用</span>
+      </div>
+
+      <!-- Wind & Dora -->
+      <div class="info-row">
+        <div class="wind-info" id="windInfo">
+          <div class="round-wind">東場</div>
+          <div class="seat-wind" id="seatWindChar">東</div>
+          <div class="seat-wind-label" id="seatWindLabel">东家</div>
+        </div>
+        <div class="dora-frame">
+          <div class="dora-frame-title">宝牌指示牌</div>
+          <div id="doraIndicators" style="display:flex;gap:3px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Discard ponds -->
+    <div class="discard-area">
+      <div>
+        <div class="pond-label">对手牌河</div>
+        <div class="discard-pond opponent" id="oppDiscard"></div>
+      </div>
+      <div>
+        <div class="pond-label">我的牌河</div>
+        <div class="discard-pond" id="myDiscard"></div>
+      </div>
+    </div>
+
+    <!-- Phase 2 status -->
+    <div class="phase2-status" id="phase2Status" style="display:none;">
+      <span class="phase2-badge">Phase 2</span>
+      <span id="phase2Info">猜牌阶段</span>
+    </div>
+
+    <!-- Phase 2 draw display -->
+    <div class="phase2-draws" id="phase2Draws" style="display:none;"></div>
+
+    <div class="guess-panel guess-panel-docked" id="guessPanel" style="display:none;">
+      <div class="guess-box">
+        <div class="guess-header">
+          <div class="guess-header-copy">
+            <h2 id="guessTitle">请选择2张牌进行猜测</h2>
+            <div class="guess-subtitle" id="guessSubtitle">系统会禁用已猜过和宣听者已打出的牌。</div>
+          </div>
+          <button class="btn-secondary guess-toggle" id="guessToggle" type="button" onclick="toggleGuessPanelMinimized()">最小化</button>
+        </div>
+        <div class="guess-body" id="guessBody">
+          <div class="guess-toolbar">
+            <div class="guess-mode-group">
+              <button class="btn-secondary guess-mode-btn active" id="guessModeSelect" type="button" onclick="setGuessMode('select')">选择猜测</button>
+              <button class="btn-secondary guess-mode-btn" id="guessModeMark" type="button" onclick="setGuessMode('mark')">标记排除</button>
+            </div>
+            <button class="btn-secondary guess-clear-btn" id="guessClearMarks" type="button" onclick="clearMarkedGuessTiles()">清除排除</button>
+          </div>
+          <div class="guess-legend">
+            <span class="guess-legend-chip guessed">已猜过</span>
+            <span class="guess-legend-chip discarded">宣听者已打出</span>
+            <span class="guess-legend-chip marked">我的排除</span>
+          </div>
+          <div class="guess-count" id="guessCount">已选: 0 / 2</div>
+          <div class="guess-tiles" id="guessTiles"></div>
+          <div class="guess-actions">
+            <button class="btn-secondary" id="guessSkip" type="button" onclick="skipGuess()" style="display:none;">跳过</button>
+            <button class="btn-primary" id="guessConfirm" onclick="submitGuess()" disabled>确认猜测</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Waiting indicator -->
+    <div class="waiting-indicator" id="waitingIndicator" style="display:none;">
+      <div class="waiting-dots"><span></span><span></span><span></span></div>
+      <span class="waiting-text">对手思考中...</span>
+    </div>
+
+    <div class="room-ready-bar" id="roundReadyBar" style="display:none;">
+      <div class="room-ready-text" id="roundReadyText">本局已结束</div>
+      <div class="room-ready-actions">
+        <button class="btn-primary" id="btnRoundReady" onclick="confirmNextRound()">继续下一局</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Player area (bottom) -->
+  <div class="player-area">
+    <div class="player-seat-anchor">
+      <div class="player-info">
+        <div>
+          <span class="name" id="myName">我</span>
+          <span class="dealer-badge" id="myDealer" style="display:none">庄</span>
+        </div>
+        <span class="points" id="myPoints">25000</span>
+      </div>
+      <div class="my-waits" id="myWaits" style="display:none;"></div>
+    </div>
+    <div class="meld-zone player-meld-zone">
+      <div class="meld-zone-label">我的副露</div>
+      <div class="player-melds" id="myMelds"></div>
+    </div>
+    <div class="player-tiles" id="myTiles"></div>
+
+    <!-- Action bar -->
+    <div class="action-bar" id="actionBar" style="display:none;">
+      <button class="btn-action-win" id="btnTsumo" onclick="doAction('tsumo')" style="display:none">自摸</button>
+      <button class="btn-action-win" id="btnRon" onclick="doAction('ron')" style="display:none">荣和</button>
+      <button class="btn-action-call" id="btnChi" onclick="showChiOptions()" style="display:none">吃</button>
+      <button class="btn-action-call" id="btnPon" onclick="doAction('pon')" style="display:none">碰</button>
+      <button class="btn-action-call" id="btnKan" onclick="showKanOptions()" style="display:none">杠</button>
+      <button class="btn-action-call" id="btnRiichi" onclick="doAction('declare_riichi')" style="display:none">立直</button>
+      <button class="btn-action-call" id="btnTenpai" onclick="doAction('declare_tenpai')" style="display:none">宣告听牌</button>
+      <button class="btn-action-pass" id="btnPass" onclick="doAction('pass')" style="display:none">跳过</button>
+    </div>
+  </div>
+</div>
+
+<!-- Chi option overlay -->
+<div class="guess-panel" id="chiPanel" style="display:none;">
+  <div class="guess-box">
+    <h2>选择吃牌组合</h2>
+    <div id="chiOptions" style="display:flex;flex-direction:column;gap:10px;margin:16px 0;"></div>
+    <button class="btn-secondary" onclick="document.getElementById('chiPanel').style.display='none'">取消</button>
+  </div>
+</div>
+
+<!-- Kan option overlay -->
+<div class="guess-panel" id="kanPanel" style="display:none;">
+  <div class="guess-box">
+    <h2>选择杠的类型</h2>
+    <div id="kanOptions" style="display:flex;flex-direction:column;gap:10px;margin:16px 0;"></div>
+    <button class="btn-secondary" onclick="document.getElementById('kanPanel').style.display='none'">取消</button>
+  </div>
+</div>
+
+<!-- Round result overlay -->
+<div class="result-overlay" id="resultOverlay" style="display:none;">
+  <div class="result-box">
+    <h2 id="resultTitle"></h2>
+    <div class="result-dora" id="resultDora" style="display:none;"></div>
+    <div class="hand-display" id="resultHand"></div>
+    <div class="yaku-list" id="resultYaku"></div>
+    <div class="score-total" id="resultScore"></div>
+    <div class="points-update" id="resultPoints"></div>
+    <button class="btn-primary" id="resultContinue" onclick="confirmNextRound()">继续</button>
+  </div>
+</div>
+
+<!-- Game over overlay -->
+<div class="result-overlay" id="gameOverOverlay" style="display:none;">
+  <div class="result-box">
+    <h2 id="gameOverTitle"></h2>
+    <div id="gameOverDetails" style="margin:16px 0;font-size:16px;"></div>
+    <button class="btn-primary" onclick="window.location.href='/lobby'">返回大厅</button>
+  </div>
+</div>
+
+<script>
+// ====================== State ======================
+const token = sessionStorage.getItem('token');
+const username = sessionStorage.getItem('username');
+if (!token) window.location.href = '/';
+
+let ws = null;
+let state = {
+  mySeat: -1,
+  phase: 'waiting',
+  myHand: [],
+  myDrawTile: null,
+  myMelds: [],
+  myDiscards: [],
+  myPoints: 25000,
+  oppClosedCount: 0,
+  oppMelds: [],
+  oppDiscards: [],
+  oppPoints: 25000,
+  oppName: '对手',
+  dealerSeat: 0,
+  roundNumber: 1,
+  wallRemaining: 122,
+  doraIndicators: [],
+  timerRemaining: 1800,
+  isLastRound: false,
+  currentTurn: 0,
+  tenpaiDeclarer: null,
+  phase2DrawCount: 0,
+  phase2GuessedTypes: [],
+  myDeclaredTenpai: false,
+  myDeclaredRiichi: false,
+  oppDeclaredTenpai: false,
+  oppDeclaredRiichi: false,
+  honbaCount: 0,
+  riichiSticks: 0,
+  myWaitingTiles: [],
+  roomPlayers: [],
+  roomReadyBySeat: {},
+  roundReadySeats: [],
+};
+
+let actions = {};      // current available actions
+let selectedTile = null;
+let guessSelected = new Set();
+let guessMarked = new Set();
+let guessMode = 'select';
+let guessPanelMinimized = false;
+let phase2GuessMessage = '请选择2张牌进行猜测';
+let phase2DrawTimer = null;  // timer ID for Phase 2 draw pacing
+let phase2ResumeKey = null;
+let timerTick = null;
+let chiOptionsData = [];
+let kanOptionsData = { ankan: [], kakan: [] };
+let resultRevealTimers = [];
+const sound = window.createFutariAudioManager({ defaultSeVolume: 0.60, defaultBgmVolume: 0.18 });
+const roomAudioState = { playerCount: 0, myReady: null, oppReady: null };
+
+sound.bindControls();
+
+function syncSceneAudio() {
+  if (state.phase === 'waiting' && state.roundNumber === 0) {
+    sound.playBgm('ready', { gain: 1, fadeMs: 220 });
+    return;
+  }
+  if (state.phase === 'phase2_guess' || state.phase === 'phase2_draw' || state.phase === 'phase2_action') {
+    sound.playBgm('phase2', { gain: 1, fadeMs: 220 });
+    return;
+  }
+  if (state.phase === 'waiting') {
+    return;
+  }
+  sound.playBgm('match', { gain: 1, fadeMs: 260 });
+}
+
+// ====================== WebSocket ======================
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'get_state' }));
+    ws.send(JSON.stringify({ type: 'get_room_status' }));
+  };
+
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    handleMessage(msg);
+  };
+
+  ws.onclose = (ev) => {
+    if (ev.code === 4001) {
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('username');
+      window.location.href = '/';
+      return;
+    }
+    setTimeout(connectWS, 2000);
+  };
+}
+
+function send(data) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data));
+  }
+}
+
+function requestStateSync() {
+  send({ type: 'get_state' });
+}
+
+function ensureTimerTick() {
+  if (timerTick) return;
+  timerTick = setInterval(() => {
+    // Before round start, timer should not tick down locally.
+    if (state.phase === 'waiting') return;
+    if (state.timerRemaining > 0) {
+      state.timerRemaining -= 1;
+      renderTimer();
+    }
+  }, 1000);
+}
+
+// ====================== Message Handler ======================
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'game_state':
+      applyFullState(msg);
+      break;
+    case 'round_start':
+      onRoundStart(msg);
+      break;
+    case 'deal':
+      onDeal(msg);
+      break;
+    case 'draw_tile':
+      onDrawTile(msg);
+      break;
+    case 'opponent_draw':
+      onOpponentDraw(msg);
+      break;
+    case 'discard':
+      onDiscard(msg);
+      break;
+    case 'call_available':
+      onCallAvailable(msg);
+      break;
+    case 'must_discard':
+      onMustDiscard(msg);
+      break;
+    case 'call_made':
+      onCallMade(msg);
+      break;
+    case 'chi':
+    case 'pon':
+      onCallMade({ ...msg, call_type: msg.type });
+      break;
+    case 'kan_declared':
+      onKanDeclared(msg);
+      break;
+    case 'ankan':
+    case 'minkan':
+    case 'kakan':
+      onKanDeclared({ ...msg, kan_type: msg.type });
+      break;
+    case 'tenpai_declared':
+      onTenpaiDeclared(msg);
+      break;
+    case 'phase2_start':
+      onPhase2Start(msg);
+      break;
+    case 'phase2_guess_request':
+      onPhase2GuessRequest(msg);
+      break;
+    case 'phase2_guess_result':
+      onPhase2GuessResult(msg);
+      break;
+    case 'phase2_draw':
+      onPhase2Draw(msg);
+      break;
+    case 'phase2_discard':
+      onPhase2Discard(msg);
+      break;
+    case 'phase2_draw_cycle_start':
+      onPhase2DrawCycleStart(msg);
+      break;
+    case 'chankan_available':
+      onCallAvailable({ calls: { can_ron: true }, discard_tile: msg.tile, discard_seat: msg.seat });
+      break;
+    case 'round_result':
+      onRoundResult(msg);
+      break;
+    case 'round_ready':
+      onRoundReady(msg);
+      break;
+    case 'tsumo':
+    case 'ron':
+    case 'draw':
+      onRoundResult({ ...msg, result_type: msg.type });
+      break;
+    case 'game_over':
+      onGameOver(msg);
+      break;
+    case 'room_status':
+      onRoomStatus(msg);
+      break;
+    case 'room_left':
+      window.location.href = '/lobby';
+      break;
+    case 'timer_update':
+      state.timerRemaining = msg.remaining;
+      state.isLastRound = msg.is_last_round;
+      renderTimer();
+      break;
+    case 'error':
+      showToast(msg.message);
+      break;
+  }
+}
+
+// ====================== State Updates ======================
+function applyFullState(msg) {
+  actions = msg.actions || {};
+  state.mySeat = msg.my_seat;
+  state.phase = msg.phase;
+  state.myHand = msg.my_hand.closed || [];
+  state.myDrawTile = msg.my_hand.draw_tile;
+  state.myMelds = msg.my_hand.melds || [];
+  state.myDiscards = msg.my_hand.discards || [];
+  state.myPoints = msg.my_points;
+  state.myDeclaredTenpai = msg.my_declared_tenpai;
+  state.myDeclaredRiichi = !!msg.my_declared_riichi;
+  state.oppClosedCount = msg.opponent_hand.closed_count || 0;
+  state.oppMelds = msg.opponent_hand.melds || [];
+  state.oppDiscards = msg.opponent_hand.discards || [];
+  state.oppPoints = msg.opponent_points;
+  state.oppName = msg.opponent_name;
+  state.oppDeclaredTenpai = msg.opponent_declared_tenpai;
+  state.oppDeclaredRiichi = !!msg.opponent_declared_riichi;
+  state.myWaitingTiles = msg.my_waiting_tiles || [];
+  state.dealerSeat = msg.dealer_seat;
+  state.roundNumber = msg.round_number;
+  state.wallRemaining = msg.wall.remaining;
+  state.doraIndicators = msg.wall.dora_indicators || [];
+  state.timerRemaining = msg.timer_remaining;
+  state.isLastRound = msg.is_last_round;
+  state.currentTurn = msg.current_turn;
+  state.tenpaiDeclarer = msg.tenpai_declarer;
+  state.honbaCount = msg.honba_count || 0;
+  state.riichiSticks = msg.riichi_sticks || 0;
+  state.phase2DrawCount = msg.phase2_draw_count || 0;
+  state.roundReadySeats = msg.round_ready_seats || [];
+  state.phase2GuessedTypes = msg.phase2_guessed_types || [];
+  if (msg.phase === 'phase2_guess' || msg.phase === 'phase2_draw' || msg.phase === 'phase2_action') {
+    syncPhase2UiFromState();
+  } else {
+    resetPhase2Ui();
+  }
+  if (msg.phase === 'round_end' || msg.phase === 'game_over') {
+    actions = {};
+    selectedTile = null;
+    hideActions();
+  }
+  renderAll();
+  restoreActionsFromState();
+  syncSceneAudio();
+}
+
+function restoreActionsFromState() {
+  hideActions();
+  if ((state.phase === 'phase1_action' || state.phase === 'phase2_action')
+      && state.currentTurn === state.mySeat && actions && Object.keys(actions).length > 0) {
+    showActions();
+    return;
+  }
+  if (state.phase === 'phase1_response' && actions && Object.keys(actions).length > 0) {
+    showCallActions();
+  }
+}
+
+function clearPhase2DrawTimer() {
+  if (phase2DrawTimer) {
+    clearTimeout(phase2DrawTimer);
+    phase2DrawTimer = null;
+  }
+}
+
+function clearPhase2ResumeKey() {
+  phase2ResumeKey = null;
+}
+
+function resetPhase2Ui() {
+  clearPhase2DrawTimer();
+  clearPhase2ResumeKey();
+  const draws = document.getElementById('phase2Draws');
+  draws.style.display = 'none';
+  draws.innerHTML = '';
+
+  const phase2Status = document.getElementById('phase2Status');
+  if (phase2Status) {
+    phase2Status.style.display = 'none';
+  }
+
+  const guessPanel = document.getElementById('guessPanel');
+  guessPanel.style.display = 'none';
+  guessSelected.clear();
+  guessMarked.clear();
+  guessMode = 'select';
+  guessPanelMinimized = false;
+  phase2GuessMessage = '请选择2张牌进行猜测';
+  updateGuessPanelMeta();
+}
+
+function phase2GuessMessageFromState() {
+  const selectableCount = getGuessSelectableTypes().length;
+  const requiredCount = Math.min(2, selectableCount);
+  const retry = state.phase2DrawCount >= 5;
+  if (requiredCount === 0) {
+    return retry ? '5次摸牌结束，已无可选牌，可跳过本轮猜牌。' : '已经没有可选牌，可跳过本轮猜牌。';
+  }
+  if (requiredCount === 1) {
+    return retry ? '5次摸牌结束，只剩1张牌可选，请按能选多少选多少。' : '只剩1张牌可选，请按能选多少选多少。';
+  }
+  return retry ? '5次摸牌结束，未和牌。请再次选择2张牌进行猜测。' : '请选择2张牌进行猜测';
+}
+
+function syncPhase2UiFromState() {
+  const draws = document.getElementById('phase2Draws');
+  const status = document.getElementById('phase2Status');
+  const info = document.getElementById('phase2Info');
+  const guessPanel = document.getElementById('guessPanel');
+
+  draws.style.display = 'flex';
+  if (status) {
+    status.style.display = 'flex';
+  }
+
+  if (state.phase === 'phase2_guess') {
+    clearPhase2DrawTimer();
+    clearPhase2ResumeKey();
+    if (info) {
+      info.textContent = state.tenpaiDeclarer === state.mySeat ? '等待对手猜牌' : '请猜测对手的听牌';
+    }
+    if (state.tenpaiDeclarer === state.mySeat) {
+      guessPanel.style.display = 'none';
+      guessSelected.clear();
+      updateGuessPanelMeta();
+    } else {
+      openGuessPanel(phase2GuessMessageFromState(), state.phase2GuessedTypes);
+    }
+    return;
+  }
+
+  if (state.phase === 'phase2_action') {
+    clearPhase2DrawTimer();
+    clearPhase2ResumeKey();
+    guessPanel.style.display = 'none';
+    guessSelected.clear();
+    updateGuessPanelMeta();
+    if (info) {
+      info.textContent = state.tenpaiDeclarer === state.mySeat ? '请选择打牌或开杠' : '对手思考中...';
+    }
+    return;
+  }
+
+  guessPanel.style.display = 'none';
+  guessSelected.clear();
+  updateGuessPanelMeta();
+  if (info) {
+    if (state.tenpaiDeclarer === state.mySeat) {
+      info.textContent = state.phase2DrawCount > 0 ? `摸牌中... 已摸${state.phase2DrawCount}次` : '摸牌中...';
+    } else {
+      info.textContent = '对手摸牌中...';
+    }
+  }
+
+  if (state.tenpaiDeclarer === state.mySeat && state.phase2DrawCount < 5) {
+    const resumeKey = `${state.roundNumber}:${state.phase2DrawCount}`;
+    if (!phase2DrawTimer && phase2ResumeKey !== resumeKey) {
+      phase2ResumeKey = resumeKey;
+      phase2DrawTimer = setTimeout(() => {
+        phase2DrawTimer = null;
+        if (state.phase === 'phase2_draw' && state.tenpaiDeclarer === state.mySeat && state.phase2DrawCount < 5) {
+          send({ type: 'phase2_next_draw' });
+        }
+      }, 900);
+    }
+  }
+}
+
+function onRoundStart(msg) {
+  sound.resetRound();
+  sound.play('roundStart');
+  state.phase = 'round_start';
+  state.dealerSeat = msg.dealer_seat;
+  state.currentTurn = msg.current_turn ?? msg.dealer_seat;
+  state.roundNumber = msg.round_number;
+  state.wallRemaining = msg.wall_remaining;
+  state.doraIndicators = msg.dora_indicators || [];
+  state.isLastRound = msg.is_last_round;
+  state.honbaCount = msg.honba_count || 0;
+  state.riichiSticks = msg.riichi_sticks || 0;
+  state.myDiscards = [];
+  state.oppDiscards = [];
+  state.myMelds = [];
+  state.oppMelds = [];
+  state.myHand = [];
+  state.myDrawTile = null;
+  state.myDeclaredTenpai = false;
+  state.myDeclaredRiichi = false;
+  state.oppDeclaredTenpai = false;
+  state.oppDeclaredRiichi = false;
+  state.tenpaiDeclarer = null;
+  state.phase2DrawCount = 0;
+  state.phase2GuessedTypes = [];
+  state.roundReadySeats = [];
+  state.roomPlayers = [];
+  state.roomReadyBySeat = {};
+  selectedTile = null;
+  actions = {};
+  roomAudioState.playerCount = 0;
+  roomAudioState.myReady = null;
+  roomAudioState.oppReady = null;
+  resetPhase2Ui();
+  hideActions();
+  document.getElementById('resultOverlay').style.display = 'none';
+  renderAll();
+  syncSceneAudio();
+}
+
+function onRoomStatus(msg) {
+  const playerCount = (msg.players || []).length;
+  state.roomPlayers = msg.players || [];
+  const readyMap = {};
+  for (const p of state.roomPlayers) {
+    readyMap[p.seat] = !!p.ready;
+  }
+  state.roomReadyBySeat = readyMap;
+  const myReady = Number.isInteger(state.mySeat) && state.mySeat >= 0 ? !!readyMap[state.mySeat] : false;
+  const oppSeat = Number.isInteger(state.mySeat) && state.mySeat >= 0 ? 1 - state.mySeat : null;
+  const oppReady = oppSeat !== null ? !!readyMap[oppSeat] : false;
+  const inWaitingRoom = state.phase === 'waiting' && state.roundNumber === 0;
+
+  if (inWaitingRoom) {
+    sound.playBgm('ready', { gain: 1, fadeMs: 180 });
+    if (roomAudioState.playerCount === 1 && playerCount === 2) {
+      sound.play('matchFound');
+    }
+    if (roomAudioState.myReady !== null && roomAudioState.myReady !== myReady) {
+      sound.play(myReady ? 'roomReadyOn' : 'roomReadyOff');
+    }
+    if (roomAudioState.oppReady !== null && roomAudioState.oppReady !== oppReady) {
+      sound.play(oppReady ? 'roomReadyOn' : 'roomReadyOff');
+    }
+  }
+
+  roomAudioState.playerCount = playerCount;
+  roomAudioState.myReady = myReady;
+  roomAudioState.oppReady = oppReady;
+  renderRoomReadyBar();
+}
+
+function onDeal(msg) {
+  // Receive dealt hand (13 tiles)
+  state.myHand = msg.hand.closed || [];
+  state.myDrawTile = null;
+  state.oppClosedCount = msg.opponent_closed_count || 13;
+  renderAll();
+}
+
+function onDrawTile(msg) {
+  sound.play('drawSelf');
+  // I drew a tile
+  state.phase = msg.phase || 'phase1_action';
+  if (typeof msg.wall_remaining === 'number') {
+    state.wallRemaining = msg.wall_remaining;
+  }
+  state.myDrawTile = msg.tile;
+  if (!state.myHand.includes(msg.tile)) {
+    state.myHand.push(msg.tile);
+  }
+  actions = msg.actions || {};
+  state.myWaitingTiles = msg.waiting_tiles || state.myWaitingTiles || [];
+  state.currentTurn = state.mySeat;
+  if (state.phase === 'phase2_action') {
+    clearPhase2DrawTimer();
+    clearPhase2ResumeKey();
+    const status = document.getElementById('phase2Status');
+    if (status) {
+      status.style.display = 'flex';
+      document.getElementById('phase2Info').textContent = actions.can_tsumo
+        ? '可自摸，或暗打当前摸牌继续追高目'
+        : '请选择打出当前摸牌或开杠';
+    }
+  }
+  renderMyHand();
+  renderTurnIndicator();
+  showActions();
+}
+
+function onOpponentDraw(msg) {
+  sound.play('drawOpponent');
+  state.wallRemaining = msg.wall_remaining;
+  state.oppClosedCount = (state.oppClosedCount || 0) + 1;
+  state.currentTurn = msg.seat;
+  hideActions();
+  renderInfoBar();
+  renderOpponent();
+  renderTurnIndicator();
+}
+
+function onDiscard(msg) {
+  const tile = Number(msg.tile);
+  state.wallRemaining = msg.wall_remaining;
+  sound.play(msg.seat === state.mySeat ? 'discardSelf' : 'discardOpponent');
+
+  if (msg.seat === state.mySeat) {
+    // My discard
+    const idx = state.myHand.indexOf(tile);
+    if (idx >= 0) state.myHand.splice(idx, 1);
+    state.myDrawTile = null;
+    state.myDiscards.push(tile);
+    selectedTile = null;
+    hideActions();
+  } else {
+    // Opponent discard
+    state.oppDiscards.push(tile);
+    if (state.oppClosedCount > 0) state.oppClosedCount--;
+  }
+  renderAll();
+}
+
+function ensureDiscardVisible(discardSeat, tile) {
+  const seat = Number(discardSeat);
+  const tid = Number(tile);
+  if (!Number.isInteger(seat) || !Number.isInteger(tid)) return;
+
+  if (seat === state.mySeat) {
+    if (!state.myDiscards.includes(tid)) {
+      state.myDiscards.push(tid);
+    }
+    state.myDrawTile = null;
+    return;
+  }
+
+  if (!state.oppDiscards.includes(tid)) {
+    state.oppDiscards.push(tid);
+    if (state.oppClosedCount > 0) state.oppClosedCount--;
+  }
+}
+
+function onCallAvailable(msg) {
+  sound.play('actionPrompt');
+  state.phase = 'phase1_response';
+  // Fallback reconciliation: if discard event is delayed/missed, keep pond UI consistent.
+  ensureDiscardVisible(msg.discard_seat, msg.discard_tile);
+  actions = msg.calls || {};
+  actions._discard_tile = msg.discard_tile;
+  actions._discard_seat = msg.discard_seat;
+  renderDiscards();
+  renderOpponent();
+  renderInfoBar();
+  showCallActions();
+}
+
+function onMustDiscard(msg) {
+  if (msg.seat === state.mySeat) {
+    sound.play('actionPrompt');
+  }
+  // After chi/pon, I must discard
+  state.phase = msg.phase || 'phase1_action';
+  state.currentTurn = msg.seat;
+  actions = {
+    must_discard: true,
+    tenpai_discards: msg.tenpai_discards || null,
+    tenpai_mode: msg.tenpai_mode || null,
+    can_ankan: msg.can_ankan || [],
+    can_kakan: msg.can_kakan || [],
+    can_declare_tenpai: !!msg.can_declare_tenpai,
+    can_declare_riichi: !!msg.can_declare_riichi,
+    can_declare_damaten: !!msg.can_declare_damaten,
+  };
+  renderMyHand();
+  renderTurnIndicator();
+  showActions();
+}
+
+function onCallMade(msg) {
+  const callType = msg.call_type || msg.type;
+  sound.play('callMade', { callType, myAction: msg.seat === state.mySeat });
+  state.currentTurn = msg.seat;
+  state.phase = 'phase1_action';
+  hideActions();
+
+  const meld = { type: callType, tiles: msg.tiles, called_tile: msg.called_tile };
+  if (msg.seat === state.mySeat) {
+    state.myMelds.push(meld);
+    // Remove meld tiles from closed hand
+    for (const t of msg.tiles) {
+      if (t !== msg.called_tile) {
+        const idx = state.myHand.indexOf(t);
+        if (idx >= 0) state.myHand.splice(idx, 1);
+      }
+    }
+    // Also remove the called tile from the opponent's discard
+    const didx = state.oppDiscards.lastIndexOf(msg.called_tile);
+    if (didx >= 0) state.oppDiscards.splice(didx, 1);
+  } else {
+    state.oppMelds.push(meld);
+    // Opponent used tiles from closed hand for the call
+    // chi/pon: 2 tiles from closed; minkan: 3 tiles from closed
+    const usedFromClosed = msg.tiles.filter(t => t !== msg.called_tile).length;
+    state.oppClosedCount = Math.max(0, state.oppClosedCount - usedFromClosed);
+    // Remove the called tile from my discards
+    const didx = state.myDiscards.lastIndexOf(msg.called_tile);
+    if (didx >= 0) state.myDiscards.splice(didx, 1);
+  }
+  renderAll();
+  requestStateSync();
+}
+
+function onKanDeclared(msg) {
+  const kanType = msg.kan_type || msg.type;
+  sound.play('callMade', { callType: kanType, myAction: msg.seat === state.mySeat });
+  state.doraIndicators = msg.dora_indicators || state.doraIndicators;
+  if (msg.seat === state.mySeat) {
+    if (kanType === 'ankan') {
+      state.myMelds.push({ type: kanType, tiles: msg.tiles, called_tile: null });
+      for (const t of msg.tiles) {
+        const idx = state.myHand.indexOf(t);
+        if (idx >= 0) state.myHand.splice(idx, 1);
+      }
+    } else if (kanType === 'minkan') {
+      state.myMelds.push({ type: kanType, tiles: msg.tiles, called_tile: null });
+      for (const t of msg.tiles) {
+        const idx = state.myHand.indexOf(t);
+        if (idx >= 0) state.myHand.splice(idx, 1);
+      }
+    } else if (kanType === 'kakan') {
+      // Upgrade existing pon to kakan: find pon meld and update it
+      const tt = Math.floor(msg.tiles[0] / 4);
+      for (let i = 0; i < state.myMelds.length; i++) {
+        const m = state.myMelds[i];
+        if (m.type === 'pon' && Math.floor(m.tiles[0] / 4) === tt) {
+          state.myMelds[i] = { type: 'kakan', tiles: msg.tiles, called_tile: m.called_tile };
+          break;
+        }
+      }
+      // Remove the extra tile from closed hand
+      const extraTile = msg.tiles[msg.tiles.length - 1];
+      const idx = state.myHand.indexOf(extraTile);
+      if (idx >= 0) state.myHand.splice(idx, 1);
+    }
+  } else {
+    if (kanType === 'ankan') {
+      state.oppMelds.push({ type: kanType, tiles: msg.tiles, called_tile: null });
+      state.oppClosedCount = Math.max(0, state.oppClosedCount - 4);
+    } else if (kanType === 'minkan') {
+      state.oppMelds.push({ type: kanType, tiles: msg.tiles, called_tile: null });
+      state.oppClosedCount = Math.max(0, state.oppClosedCount - 3);
+    } else if (kanType === 'kakan') {
+      // Upgrade existing pon meld for opponent
+      const tt = Math.floor(msg.tiles[0] / 4);
+      for (let i = 0; i < state.oppMelds.length; i++) {
+        const m = state.oppMelds[i];
+        if (m.type === 'pon' && Math.floor(m.tiles[0] / 4) === tt) {
+          state.oppMelds[i] = { type: 'kakan', tiles: msg.tiles, called_tile: m.called_tile };
+          break;
+        }
+      }
+      state.oppClosedCount = Math.max(0, state.oppClosedCount - 1);
+    }
+  }
+  renderAll();
+  requestStateSync();
+}
+
+function onTenpaiDeclared(msg) {
+  if (msg.points) {
+    state.myPoints = msg.points[state.mySeat] ?? state.myPoints;
+    state.oppPoints = msg.points[1 - state.mySeat] ?? state.oppPoints;
+  }
+  state.honbaCount = msg.honba_count ?? state.honbaCount;
+  state.riichiSticks = msg.riichi_sticks ?? state.riichiSticks;
+  if (msg.seat === state.mySeat) {
+    sound.play('tenpaiSelf');
+    state.myDeclaredTenpai = true;
+    state.myDeclaredRiichi = !!msg.riichi;
+    showToast(msg.riichi ? '你已立直，请打出一张保持听牌的牌' : '你宣告了听牌，请打出一张保持听牌的牌', 'success');
+  } else {
+    sound.play('tenpaiOpponent');
+    state.oppDeclaredTenpai = true;
+    state.oppDeclaredRiichi = !!msg.riichi;
+    showToast(msg.riichi ? '对手立直了！' : '对手宣告了听牌！', 'danger');
+  }
+  state.tenpaiDeclarer = msg.seat;
+  renderAll();
+}
+
+function onPhase2Start(msg) {
+  sound.play('phase2Start');
+  state.phase = 'phase2_guess';
+  state.tenpaiDeclarer = msg.tenpai_declarer;
+  state.currentTurn = msg.guesser;
+  state.phase2DrawCount = 0;
+  clearPhase2DrawTimer();
+  clearPhase2ResumeKey();
+  document.getElementById('phase2Draws').style.display = 'flex';
+  document.getElementById('phase2Draws').innerHTML = '';
+  // [R2-5] Show phase 2 status
+  const status = document.getElementById('phase2Status');
+  if (status) {
+    status.style.display = 'flex';
+    document.getElementById('phase2Info').textContent =
+      msg.tenpai_declarer === state.mySeat ? '等待对手猜牌' : '请猜测对手的听牌';
+  }
+  if (msg.tenpai_declarer === state.mySeat) {
+    showToast('进入第二阶段 - 等待对手猜牌', 'warning');
+  } else {
+    showToast('进入第二阶段 - 请猜测对手的听牌', 'warning');
+  }
+  renderTurnIndicator();
+  syncSceneAudio();
+}
+
+function onPhase2GuessRequest(msg) {
+  state.phase = 'phase2_guess';
+  state.currentTurn = state.mySeat;
+  if (state.tenpaiDeclarer !== state.mySeat) {
+    sound.play('actionPrompt');
+    state.phase2GuessedTypes = msg.already_guessed || state.phase2GuessedTypes || [];
+    openGuessPanel(msg.message, state.phase2GuessedTypes);
+  }
+  renderTurnIndicator();
+}
+
+function onPhase2GuessResult(msg) {
+  sound.play(msg.hit ? 'guessHit' : 'guessMiss');
+  if (msg.guesser === state.mySeat) {
+    state.phase2GuessedTypes = msg.already_guessed || msg.guessed || state.phase2GuessedTypes || [];
+  }
+  const names = (msg.guessed_names || []).join('、');
+  if (msg.skipped) {
+    showToast('已无可选牌，跳过本轮猜牌。');
+  } else if (msg.hit) {
+    showToast(`猜中了！猜测: ${names}`, 'success');
+  } else {
+    showToast(`未猜中。猜测: ${names}`, 'danger');
+  }
+}
+
+function onPhase2DrawCycleStart(msg) {
+  state.phase = 'phase2_draw';
+  state.currentTurn = msg.declarer;
+  state.phase2DrawCount = 0;
+  clearPhase2DrawTimer();
+  clearPhase2ResumeKey();
+  const container = document.getElementById('phase2Draws');
+  container.style.display = 'flex';
+  container.innerHTML = '';
+  // Update phase2 status
+  const status = document.getElementById('phase2Status');
+  if (status) {
+    status.style.display = 'flex';
+    document.getElementById('phase2Info').textContent =
+      msg.declarer === state.mySeat ? '摸牌中...' : '对手摸牌中...';
+  }
+  renderTurnIndicator();
+  if (msg.declarer === state.mySeat) {
+    send({ type: 'phase2_next_draw' });
+  }
+}
+
+function onPhase2Draw(msg) {
+  sound.play('phase2Draw');
+  state.phase2DrawCount = msg.draw_number;
+  clearPhase2ResumeKey();
+  const container = document.getElementById('phase2Draws');
+  container.style.display = 'flex';
+  const tile = Number(msg.tile);
+  const el = Number.isInteger(tile)
+    ? createTileElement(tile, { size: 'small' })
+    : createTileElement(null, { size: 'small' });
+  container.appendChild(el);
+  state.wallRemaining = msg.wall_remaining;
+  renderInfoBar();
+
+  const status = document.getElementById('phase2Status');
+  if (status && status.style.display !== 'none') {
+    document.getElementById('phase2Info').textContent =
+      msg.declarer === state.mySeat
+        ? `第${msg.draw_number}次摸牌，请自行决定是否自摸`
+        : `对手第${msg.draw_number}次摸牌中`;
+  }
+  // do NOT request next draw here; wait for phase2_discard
+}
+
+function onPhase2Discard(msg) {
+  clearPhase2ResumeKey();
+  const tile = Number(msg.tile);
+  const hasVisibleTile = Number.isInteger(tile);
+  const remaining = msg.draws_remaining;
+
+  if (msg.declarer === state.mySeat) {
+    const discardedTile = hasVisibleTile ? tile : state.myDrawTile;
+    const idx = state.myHand.indexOf(discardedTile);
+    if (idx >= 0) state.myHand.splice(idx, 1);
+    state.myDrawTile = null;
+    if (hasVisibleTile) {
+      state.myDiscards.push(tile);
+    }
+    selectedTile = null;
+    hideActions();
+  } else {
+    if (hasVisibleTile && !state.oppDiscards.includes(tile)) {
+      state.oppDiscards.push(tile);
+    }
+  }
+
+  state.phase = remaining > 0 ? 'phase2_draw' : 'phase2_guess';
+  state.currentTurn = remaining > 0 ? msg.declarer : (msg.declarer === 0 ? 1 : 0);
+
+  if (remaining > 0 && msg.declarer === state.mySeat) {
+    clearPhase2DrawTimer();
+    phase2DrawTimer = setTimeout(() => {
+      send({ type: 'phase2_next_draw' });
+    }, 1500);
+  } else {
+    clearPhase2DrawTimer();
+  }
+  // Update phase 2 status
+  const status = document.getElementById('phase2Status');
+  if (status && status.style.display !== 'none') {
+    document.getElementById('phase2Info').textContent =
+      remaining > 0
+        ? `摸牌中... 剩余${remaining}次`
+        : (msg.declarer === state.mySeat ? '等待对手猜牌' : '请猜测对手的听牌');
+  }
+
+  if (msg.hidden_discard) {
+    showToast(msg.declarer === state.mySeat ? '已放弃本次和牌，暗打当前摸牌' : '对手已处理本次摸牌');
+  }
+
+  if (remaining === 0) {
+    if (msg.declarer === state.mySeat) {
+      document.getElementById('guessPanel').style.display = 'none';
+      guessSelected.clear();
+      updateGuessPanelMeta();
+    } else {
+      openGuessPanel(phase2GuessMessageFromState(), state.phase2GuessedTypes);
+    }
+  }
+  renderMyHand();
+  renderDiscards();
+  renderTurnIndicator();
+}
+
+function onRoundReady(msg) {
+  state.roundReadySeats = msg.ready_seats || [];
+  renderAll();
+}
+
+function appendResultHand(container, handData, winningTile = null) {
+  if (!handData) return;
+
+  let highlighted = false;
+  for (const t of (handData.closed || [])) {
+    const tileEl = createTileElement(t, { size: 'small' });
+    if (!highlighted && winningTile !== null && t === winningTile) {
+      tileEl.classList.add('winning-tile');
+      highlighted = true;
+    }
+    container.appendChild(tileEl);
+  }
+
+  if (handData.melds) {
+    for (const meld of handData.melds) {
+      const sep = document.createElement('span');
+      sep.style.width = '8px';
+      container.appendChild(sep);
+      for (const t of meld.tiles) {
+        const el = createTileElement(t, { size: 'small' });
+        if (t === meld.called_tile) el.classList.add('rotated');
+        container.appendChild(el);
+      }
+    }
+  }
+}
+
+function onRoundResult(msg) {
+  state.phase = 'round_end';
+  state.currentTurn = -1;
+  state.phase2DrawCount = 0;
+  state.roundReadySeats = [];
+  state.honbaCount = msg.honba_count ?? state.honbaCount;
+  state.riichiSticks = msg.riichi_sticks ?? state.riichiSticks;
+  actions = {};
+  selectedTile = null;
+  resetPhase2Ui();
+  hideActions();
+
+  const resultType = msg.result_type || msg.type;
+  if (resultType === 'tsumo' || resultType === 'ron') {
+    sound.play(msg.winner === state.mySeat ? 'resultWin' : 'resultLose');
+  } else if (resultType === 'draw') {
+    sound.play('resultDraw');
+  }
+  const overlay = document.getElementById('resultOverlay');
+  const box = overlay.querySelector('.result-box');
+  const title = document.getElementById('resultTitle');
+  const hand = document.getElementById('resultHand');
+  const dora = document.getElementById('resultDora');
+  const yakuList = document.getElementById('resultYaku');
+  const score = document.getElementById('resultScore');
+  const points = document.getElementById('resultPoints');
+
+  hand.innerHTML = '';
+  dora.innerHTML = '';
+  dora.style.display = 'none';
+  yakuList.innerHTML = '';
+  resetResultRevealStages();
+
+  const oldMyPoints = state.myPoints;
+  const oldOppPoints = state.oppPoints;
+  const myNewPts = msg.points?.[state.mySeat] ?? oldMyPoints;
+  const oppNewPts = msg.points?.[1 - state.mySeat] ?? oldOppPoints;
+  const myDeltaFromPayload = msg.points_delta?.[state.mySeat];
+  const oppDeltaFromPayload = msg.points_delta?.[1 - state.mySeat];
+  const myDelta = Number.isInteger(myDeltaFromPayload) ? myDeltaFromPayload : (myNewPts - oldMyPoints);
+  const oppDelta = Number.isInteger(oppDeltaFromPayload) ? oppDeltaFromPayload : (oppNewPts - oldOppPoints);
+
+  if (resultType === 'tsumo' || resultType === 'ron') {
+    const isMyWin = msg.winner === state.mySeat;
+    const winnerName = isMyWin ? '你' : state.oppName;
+    const typeName = resultType === 'tsumo' ? '自摸' : '荣和';
+    title.textContent = `${winnerName} ${typeName}！`;
+    title.className = isMyWin ? 'result-win' : 'result-lose';
+
+    // Show winning hand
+    appendResultHand(hand, msg.hand, msg.win_tile);
+
+    // Optional ura-dora display (if backend includes it)
+    const uradora = msg.score?.uradora_indicators || [];
+    if (uradora.length > 0) {
+      dora.style.display = 'flex';
+      const label = document.createElement('span');
+      label.className = 'result-dora-label';
+      label.textContent = '里宝牌';
+      dora.appendChild(label);
+      for (const t of uradora) {
+        dora.appendChild(createTileElement(t, { size: 'small' }));
+      }
+    }
+
+    // Yaku list with han count [U6]
+    if (msg.score && msg.score.yaku) {
+      for (const y of msg.score.yaku) {
+        const item = document.createElement('div');
+        item.className = 'yaku-item';
+        const nameSpan = document.createElement('span');
+        const hanSpan = document.createElement('span');
+        hanSpan.className = 'yaku-han';
+        nameSpan.textContent = translateYaku(y);
+        hanSpan.textContent = yakuHanLabel(y);
+        item.appendChild(nameSpan);
+        item.appendChild(hanSpan);
+        yakuList.appendChild(item);
+      }
+    }
+
+    const sc = msg.score || {};
+    const handPoints = Math.max(0, (msg.points_transfer || 0) - (msg.honba_bonus || 0));
+    score.innerHTML = formatWinScoreBreakdown({
+      han: sc.han || 0,
+      fu: sc.fu || 0,
+      handPoints,
+      honbaBonus: msg.honba_bonus || 0,
+      riichiBonus: msg.riichi_bonus || 0,
+      totalGain: msg.points_delta?.[msg.winner] || 0,
+    });
+    points.innerHTML = formatPointsRows(myNewPts, oppNewPts, myDelta, oppDelta);
+  } else if (resultType === 'draw') {
+    // Draw
+    title.textContent = '流局';
+    title.className = 'result-draw';
+    let reason = '（牌山摸完）';
+    if (msg.reason === 'phase2_guess_hit') {
+      reason = '（猜中听牌）';
+    } else if (msg.reason === 'four_kan_abort') {
+      reason = '（四杠散了）';
+    } else if (msg.reason === 'nagashi_mangan') {
+      if (Number.isInteger(msg.winner)) {
+        const isMyWin = msg.winner === state.mySeat;
+        const winnerName = isMyWin ? '你' : (msg.winner_name || state.oppName);
+        title.textContent = `${winnerName} 流局满贯！`;
+        title.className = isMyWin ? 'result-win' : 'result-lose';
+
+        if (msg.score && msg.score.yaku) {
+          for (const y of msg.score.yaku) {
+            const item = document.createElement('div');
+            item.className = 'yaku-item';
+            const nameSpan = document.createElement('span');
+            const hanSpan = document.createElement('span');
+            hanSpan.className = 'yaku-han';
+            nameSpan.textContent = translateYaku(y);
+            hanSpan.textContent = yakuHanLabel(y);
+            item.appendChild(nameSpan);
+            item.appendChild(hanSpan);
+            yakuList.appendChild(item);
+          }
+        }
+
+        const sc = msg.score || {};
+        const handPoints = Math.max(0, (msg.points_transfer || 0) - (msg.honba_bonus || 0));
+        score.innerHTML = formatWinScoreBreakdown({
+          han: sc.han || 0,
+          fu: sc.fu || 0,
+          handPoints,
+          honbaBonus: msg.honba_bonus || 0,
+          riichiBonus: msg.riichi_bonus || 0,
+          totalGain: msg.points_delta?.[msg.winner] || 0,
+        });
+      } else {
+        reason = `（双家流局满贯：${(msg.nagashi_names || []).join('、')}）`;
+      }
+    }
+    if (!Number.isInteger(msg.winner) || msg.reason !== 'nagashi_mangan') {
+      score.textContent = reason;
+    }
+
+    const t0 = msg.tenpai?.[0] ? '听牌' : '未听';
+    const t1 = msg.tenpai?.[1] ? '听牌' : '未听';
+    const myTenpai = state.mySeat === 0 ? t0 : t1;
+    const oppTenpai = state.mySeat === 0 ? t1 : t0;
+
+    if (msg.reason === 'phase2_guess_hit' && msg.revealed_hand) {
+      const revealLabel = document.createElement('div');
+      revealLabel.className = 'result-hand-label';
+      revealLabel.textContent = msg.revealed_seat === state.mySeat
+        ? '你的听牌手牌已公开'
+        : `${msg.revealed_name || state.oppName}的听牌手牌已公开`;
+      hand.appendChild(revealLabel);
+      appendResultHand(hand, msg.revealed_hand);
+    }
+
+    if (msg.reason === 'nagashi_mangan' && Number.isInteger(msg.winner)) {
+      const winnerItem = document.createElement('div');
+      winnerItem.className = 'yaku-item';
+      winnerItem.innerHTML = `<span>和了者</span><span>${msg.winner === state.mySeat ? '你' : (msg.winner_name || state.oppName)}</span>`;
+      yakuList.appendChild(winnerItem);
+    } else if (msg.reason === 'nagashi_mangan') {
+      yakuList.innerHTML = `
+        <div class="yaku-item"><span>流局满贯</span><span>${(msg.nagashi_names || []).join('、') || '无人'}</span></div>
+        <div class="yaku-item"><span>你</span><span>${myTenpai}</span></div>
+        <div class="yaku-item"><span>${state.oppName}</span><span>${oppTenpai}</span></div>
+      `;
+    } else {
+      yakuList.innerHTML = msg.reason === 'phase2_guess_hit' && msg.revealed_hand
+      ? `
+        <div class="yaku-item"><span>被猜中者</span><span>${msg.revealed_seat === state.mySeat ? '你' : (msg.revealed_name || state.oppName)}</span></div>
+        <div class="yaku-item"><span>你</span><span>${myTenpai}</span></div>
+        <div class="yaku-item"><span>${state.oppName}</span><span>${oppTenpai}</span></div>
+      `
+      : `
+        <div class="yaku-item"><span>你</span><span>${myTenpai}</span></div>
+        <div class="yaku-item"><span>${state.oppName}</span><span>${oppTenpai}</span></div>
+      `;
+    }
+    points.innerHTML = formatPointsRows(myNewPts, oppNewPts, myDelta, oppDelta);
+  } else {
+    title.textContent = '结算信息';
+    title.className = 'result-draw';
+    score.textContent = `未知结算类型：${msg.type || 'unknown'}`;
+    points.innerHTML = formatPointsRows(myNewPts, oppNewPts, myDelta, oppDelta);
+  }
+
+  box.classList.toggle('compact', yakuList.children.length >= 7 || hand.children.length >= 15);
+
+  // Update points
+  if (msg.points) {
+    state.myPoints = myNewPts;
+    state.oppPoints = oppNewPts;
+  }
+
+  overlay.style.display = 'flex';
+  renderAll();
+  playResultRevealStages();
+}
+
+function onGameOver(msg) {
+  state.phase = 'game_over';
+  state.currentTurn = -1;
+  state.phase2DrawCount = 0;
+  state.roundReadySeats = [];
+  state.honbaCount = msg.honba_count ?? state.honbaCount;
+  state.riichiSticks = msg.riichi_sticks ?? state.riichiSticks;
+  actions = {};
+  selectedTile = null;
+  resetPhase2Ui();
+  hideActions();
+  document.getElementById('resultOverlay').style.display = 'none';
+
+  const overlay = document.getElementById('gameOverOverlay');
+  const title = document.getElementById('gameOverTitle');
+  const details = document.getElementById('gameOverDetails');
+
+  const isWinner = msg.winner === state.mySeat;
+  sound.stopBgm({ fadeMs: 220 });
+  sound.play(isWinner ? 'gameWin' : 'gameLose');
+  title.textContent = isWinner ? '🎉 你赢了！' : '😞 你输了';
+  title.style.color = isWinner ? 'var(--gold)' : 'var(--red)';
+
+  const finalPoints = msg.final_points || {};
+  const myPts = finalPoints[state.mySeat] ?? state.myPoints;
+  const oppPts = finalPoints[1 - state.mySeat] ?? state.oppPoints;
+  details.innerHTML = `
+    <div style="margin:8px 0">你: <span style="color:var(--gold);font-weight:700">${myPts}</span> 点</div>
+    <div style="margin:8px 0">${state.oppName}: <span style="color:var(--gold);font-weight:700">${oppPts}</span> 点</div>
+  `;
+
+  overlay.style.display = 'flex';
+  renderAll();
+}
+
+function confirmNextRound() {
+  sound.play('uiConfirm');
+  resetResultRevealStages();
+  document.getElementById('resultOverlay').style.display = 'none';
+  resetPhase2Ui();
+  if (state.phase === 'round_end' && !state.roundReadySeats.includes(state.mySeat)) {
+    state.roundReadySeats = [...new Set([...state.roundReadySeats, state.mySeat])];
+    send({ type: 'ready' });
+  }
+  renderAll();
+}
+
+function clearResultRevealTimers() {
+  for (const timerId of resultRevealTimers) {
+    clearTimeout(timerId);
+  }
+  resultRevealTimers = [];
+}
+
+function resetResultRevealStages() {
+  clearResultRevealTimers();
+  const title = document.getElementById('resultTitle');
+  const yakuList = document.getElementById('resultYaku');
+  const score = document.getElementById('resultScore');
+  const points = document.getElementById('resultPoints');
+  const stages = [title, yakuList, score, points];
+  for (const el of stages) {
+    if (!el) continue;
+    el.classList.remove('reveal-in', 'result-stage', 'result-title-stage');
+    el.style.transitionDelay = '0ms';
+  }
+}
+
+function playResultRevealStages() {
+  const title = document.getElementById('resultTitle');
+  const yakuList = document.getElementById('resultYaku');
+  const score = document.getElementById('resultScore');
+  const points = document.getElementById('resultPoints');
+  const stages = [title, yakuList, score, points];
+
+  stages.forEach((el, index) => {
+    if (!el) return;
+    el.classList.add('result-stage');
+    if (index === 0) {
+      el.classList.add('result-title-stage');
+    }
+    const timerId = setTimeout(() => {
+      el.classList.add('reveal-in');
+    }, 40 + index * 130);
+    resultRevealTimers.push(timerId);
+  });
+}
+
+// ====================== Rendering ======================
+function renderAll() {
+  renderInfoBar();
+  renderDora();
+  renderOpponent();
+  renderMyHand();
+  renderDiscards();
+  renderMelds();
+  renderWaitingTiles();
+  renderTimer();
+  renderTurnIndicator();
+  renderLeaveWaitingRoomButton();
+  renderRoomReadyBar();
+  renderRoundReadyBar();
+}
+
+function renderLeaveWaitingRoomButton() {
+  const btn = document.getElementById('btnLeaveWaitingRoom');
+  if (!btn) return;
+  const canLeave = state.phase === 'waiting' && state.roundNumber === 0;
+  btn.style.display = canLeave ? 'inline-block' : 'none';
+}
+
+function leaveWaitingRoom() {
+  sound.play('uiCancel');
+  send({ type: 'leave_room' });
+}
+
+function setRoomReady(ready) {
+  sound.play(ready ? 'roomReadyOn' : 'roomReadyOff');
+  send({ type: ready ? 'room_ready' : 'room_unready' });
+}
+
+function renderRoomReadyBar() {
+  const bar = document.getElementById('roomReadyBar');
+  const text = document.getElementById('roomReadyText');
+  const btnReady = document.getElementById('btnRoomReady');
+  const btnUnready = document.getElementById('btnRoomUnready');
+  if (!bar || !text || !btnReady || !btnUnready) return;
+
+  const inWaitingRoom = state.phase === 'waiting' && state.roundNumber === 0;
+  bar.style.display = inWaitingRoom ? 'flex' : 'none';
+  if (!inWaitingRoom) return;
+
+  const myReady = !!state.roomReadyBySeat[state.mySeat];
+  const oppSeat = 1 - state.mySeat;
+  const oppReady = !!state.roomReadyBySeat[oppSeat];
+  const playerCount = (state.roomPlayers || []).length;
+
+  if (playerCount < 2) {
+    text.textContent = '已进入房间，等待对手加入...';
+  } else {
+    text.textContent = `准备状态：你${myReady ? '已准备' : '未准备'} / 对手${oppReady ? '已准备' : '未准备'}`;
+  }
+
+  btnReady.style.display = myReady ? 'none' : 'inline-block';
+  btnUnready.style.display = myReady ? 'inline-block' : 'none';
+}
+
+function renderRoundReadyBar() {
+  const bar = document.getElementById('roundReadyBar');
+  const text = document.getElementById('roundReadyText');
+  const btn = document.getElementById('btnRoundReady');
+  if (!bar || !text || !btn) return;
+
+  const inRoundEnd = state.phase === 'round_end';
+  bar.style.display = inRoundEnd ? 'flex' : 'none';
+  if (!inRoundEnd) return;
+
+  const myReady = state.roundReadySeats.includes(state.mySeat);
+  const oppSeat = 1 - state.mySeat;
+  const oppReady = state.roundReadySeats.includes(oppSeat);
+
+  if (myReady) {
+    text.textContent = oppReady ? '双方已继续，正在开始下一局...' : '已继续，等待对手继续...';
+  } else if (oppReady) {
+    text.textContent = '对手已继续，点击继续开始下一局';
+  } else {
+    text.textContent = '本局已结束，点击继续开始下一局';
+  }
+
+  btn.style.display = myReady ? 'none' : 'inline-block';
+}
+
+function renderWaitingTiles() {
+  const waitsEl = document.getElementById('myWaits');
+  if (!waitsEl) return;
+
+  const waits = state.myWaitingTiles || [];
+  const show = state.myDeclaredTenpai || waits.length > 0;
+
+  if (!show) {
+    waitsEl.style.display = 'none';
+    waitsEl.innerHTML = '';
+    return;
+  }
+
+  waitsEl.style.display = 'flex';
+  waitsEl.innerHTML = '';
+
+  const label = document.createElement('span');
+  label.className = 'my-waits-label';
+  label.textContent = '待牌';
+  waitsEl.appendChild(label);
+
+  if (waits.length === 0) {
+    const empty = document.createElement('span');
+    empty.className = 'my-waits-empty';
+    empty.textContent = '已宣告听牌';
+    waitsEl.appendChild(empty);
+    return;
+  }
+
+  const tiles = document.createElement('div');
+  tiles.className = 'my-waits-values my-waits-tiles';
+
+  for (const wait of waits) {
+    const tileTypeValue = typeof getTileTypeFromLabel === 'function' ? getTileTypeFromLabel(wait) : null;
+    if (tileTypeValue !== null && tileTypeValue !== undefined) {
+      tiles.appendChild(createTileTypeElement(tileTypeValue, { size: 'mini' }));
+      continue;
+    }
+
+    const fallback = document.createElement('span');
+    fallback.className = 'my-waits-fallback';
+    fallback.textContent = String(wait);
+    tiles.appendChild(fallback);
+  }
+
+  waitsEl.appendChild(tiles);
+}
+
+// ===== [U1] Turn indicator =====
+function renderTurnIndicator() {
+  const oppArea = document.querySelector('.opponent-area');
+  const playerArea = document.querySelector('.player-area');
+  const waitEl = document.getElementById('waitingIndicator');
+  const waitText = waitEl ? waitEl.querySelector('.waiting-text') : null;
+
+  document.querySelectorAll('.turn-badge').forEach(el => el.remove());
+
+  const showTurn = ['phase1_draw', 'phase1_action', 'phase1_response', 'phase2_guess', 'phase2_draw', 'phase2_action'].includes(state.phase)
+    && Number.isInteger(state.currentTurn)
+    && state.currentTurn >= 0;
+
+  if (!showTurn) {
+    oppArea.classList.remove('active-turn');
+    playerArea.classList.remove('active-turn');
+    if (waitEl) waitEl.style.display = 'none';
+    return;
+  }
+
+  const isMyTurn = state.currentTurn === state.mySeat;
+
+  oppArea.classList.toggle('active-turn', !isMyTurn);
+  playerArea.classList.toggle('active-turn', isMyTurn);
+
+  // Turn badge in info bars
+  if (isMyTurn) {
+    const badge = document.createElement('span');
+    badge.className = 'turn-badge';
+    badge.textContent = '你的回合';
+    document.querySelector('.player-info').appendChild(badge);
+  } else {
+    const badge = document.createElement('span');
+    badge.className = 'turn-badge';
+    badge.textContent = '对手回合';
+    document.querySelector('.opponent-info').appendChild(badge);
+  }
+
+  // [R2-8] Waiting indicator
+  if (waitEl) {
+    const mySeatReady = Number.isInteger(state.mySeat) && state.mySeat >= 0;
+    const opponentThinkingPhase = state.phase === 'phase1_action' || state.phase === 'phase2_guess' || state.phase === 'phase2_draw' || state.phase === 'phase2_action';
+    const iCanActNow = state.phase === 'phase1_response' || (actions && Object.keys(actions).some(k => k.startsWith('can_') && actions[k]));
+    const showWaiting = mySeatReady && !isMyTurn && opponentThinkingPhase && !iCanActNow;
+    if (waitText) {
+      waitText.textContent = state.phase === 'phase2_draw' ? '对手摸牌中...' : '对手思考中...';
+    }
+    waitEl.style.display = showWaiting ? 'flex' : 'none';
+  }
+}
+
+function renderInfoBar() {
+  document.getElementById('roundInfo').textContent = `第${state.roundNumber}局`;
+  document.getElementById('honbaInfo').textContent = `本场: ${state.honbaCount}`;
+  document.getElementById('riichiStickInfo').textContent = `立直棒: ${state.riichiSticks}`;
+  document.getElementById('wallCount').textContent = `余牌: ${state.wallRemaining}`;
+  if (state.isLastRound) {
+    document.getElementById('roundInfo').textContent += ' (最终局)';
+  }
+  // [R2-4] Wind info
+  const seatWindEl = document.getElementById('seatWindChar');
+  const seatLabelEl = document.getElementById('seatWindLabel');
+  if (seatWindEl) {
+    const isDealer = state.dealerSeat === state.mySeat;
+    seatWindEl.textContent = isDealer ? '東' : '南';
+    seatLabelEl.textContent = isDealer ? '东家(庄)' : '南家(子)';
+  }
+}
+
+function renderTimer() {
+  const el = document.getElementById('timer');
+  const mins = Math.floor(state.timerRemaining / 60);
+  const secs = state.timerRemaining % 60;
+  el.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  el.classList.toggle('urgent', state.timerRemaining < 60);
+  sound.syncTimer(state.timerRemaining);
+}
+
+function renderDora() {
+  const container = document.getElementById('doraIndicators');
+  container.innerHTML = '';
+  for (const d of state.doraIndicators) {
+    container.appendChild(createTileElement(d, { size: 'small' }));
+  }
+}
+
+function renderOpponent() {
+  const nameEl = document.getElementById('oppName');
+  const pointsEl = document.getElementById('oppPoints');
+  const tenpaiEl = document.getElementById('oppTenpai');
+  const dealerEl = document.getElementById('oppDealer');
+  const tilesEl = document.getElementById('oppTiles');
+
+  nameEl.textContent = state.oppName;
+  pointsEl.textContent = state.oppPoints;
+  tenpaiEl.style.display = state.oppDeclaredTenpai ? 'inline' : 'none';
+  tenpaiEl.textContent = state.oppDeclaredRiichi ? '立直' : '听牌';
+  dealerEl.style.display = (state.dealerSeat !== state.mySeat) ? 'inline' : 'none';
+
+  tilesEl.innerHTML = '';
+  for (let i = 0; i < state.oppClosedCount; i++) {
+    const el = createTileElement(null, { size: 'small' });
+    // [R2-7] Stagger animation delay
+    el.style.animationDelay = `${i * 0.15}s`;
+    tilesEl.appendChild(el);
+  }
+}
+
+function canInteractWithHand() {
+  return state.currentTurn === state.mySeat && (state.phase === 'phase1_action' || state.phase === 'phase2_action');
+}
+
+function canDiscardTile(tileId) {
+  if (!canInteractWithHand()) return false;
+  if (Array.isArray(actions.tenpai_discards) && actions.tenpai_discards.length > 0) {
+    return actions.tenpai_discards.includes(tileId);
+  }
+  return true;
+}
+
+function renderMyHand() {
+  const container = document.getElementById('myTiles');
+  const nameEl = document.getElementById('myName');
+  const pointsEl = document.getElementById('myPoints');
+  const dealerEl = document.getElementById('myDealer');
+
+  nameEl.textContent = username || '我';
+  pointsEl.textContent = state.myPoints;
+  dealerEl.style.display = (state.dealerSeat === state.mySeat) ? 'inline' : 'none';
+
+  container.innerHTML = '';
+
+  // Sort hand but separate draw tile
+  const handTiles = state.myHand.filter(t => t !== state.myDrawTile);
+  handTiles.sort((a, b) => tileType(a) - tileType(b));
+
+  const canDiscard = canInteractWithHand();
+  if (!canDiscard) {
+    selectedTile = null;
+  }
+
+  // [R2-1] Add suit group gaps
+  let prevSuitGroup = -1;
+  for (const t of handTiles) {
+    const tt = tileType(t);
+    const suitGroup = tt < 9 ? 0 : tt < 18 ? 1 : tt < 27 ? 2 : 3;
+    if (prevSuitGroup >= 0 && suitGroup !== prevSuitGroup) {
+      const gap = document.createElement('span');
+      gap.className = 'suit-gap';
+      container.appendChild(gap);
+    }
+    prevSuitGroup = suitGroup;
+    const tileClickable = canDiscardTile(t);
+    const el = createTileElement(t, { clickable: tileClickable, selected: selectedTile === t });
+    if (tileClickable) {
+      el.addEventListener('click', () => selectTile(t));
+    }
+    container.appendChild(el);
+  }
+
+  // Draw tile with gap + entrance animation [U5]
+  if (state.myDrawTile !== null && state.myHand.includes(state.myDrawTile)) {
+    const gap = document.createElement('span');
+    gap.style.width = '12px';
+    container.appendChild(gap);
+    const drawClickable = canDiscardTile(state.myDrawTile);
+    const el = createTileElement(state.myDrawTile, { clickable: drawClickable, selected: selectedTile === state.myDrawTile });
+    el.classList.add('draw-tile-enter');
+    if (drawClickable) {
+      el.addEventListener('click', () => selectTile(state.myDrawTile));
+    }
+    container.appendChild(el);
+  }
+}
+
+function renderDiscards() {
+  const myPond = document.getElementById('myDiscard');
+  const oppPond = document.getElementById('oppDiscard');
+  myPond.innerHTML = '';
+  oppPond.innerHTML = '';
+  for (let i = 0; i < state.myDiscards.length; i++) {
+    const el = createTileElement(state.myDiscards[i], { size: 'mini' });
+    if (i === state.myDiscards.length - 1) el.classList.add('last-discard');
+    myPond.appendChild(el);
+  }
+  for (let i = 0; i < state.oppDiscards.length; i++) {
+    const el = createTileElement(state.oppDiscards[i], { size: 'mini' });
+    if (i === state.oppDiscards.length - 1) el.classList.add('last-discard');
+    oppPond.appendChild(el);
+  }
+}
+
+function renderMelds() {
+  const myContainer = document.getElementById('myMelds');
+  const oppContainer = document.getElementById('oppMelds');
+  myContainer.innerHTML = '';
+  oppContainer.innerHTML = '';
+
+  for (const m of state.myMelds) {
+    myContainer.appendChild(renderMeldGroup(m));
+  }
+  for (const m of state.oppMelds) {
+    oppContainer.appendChild(renderMeldGroup(m));
+  }
+}
+
+function renderMeldGroup(meld) {
+  const group = document.createElement('div');
+  group.className = 'meld-group';
+
+  if (meld.type === 'ankan') {
+    // [R2-2] Ankan: first & last face-down, middle two face-up
+    for (let i = 0; i < meld.tiles.length; i++) {
+      if (i === 0 || i === 3) {
+        group.appendChild(createTileElement(null, { size: 'small' }));
+      } else {
+        group.appendChild(createTileElement(meld.tiles[i], { size: 'small' }));
+      }
+    }
+  } else {
+    for (const t of meld.tiles) {
+      const opts = { size: 'small' };
+      if (t === meld.called_tile) opts.rotated = true;
+      group.appendChild(createTileElement(t, opts));
+    }
+  }
+  return group;
+}
+
+// ====================== Actions ======================
+function selectTile(tileId) {
+  if (!canInteractWithHand()) {
+    selectedTile = null;
+    renderMyHand();
+    return;
+  }
+  if (selectedTile === tileId) {
+    // Double-click = discard
+    discardTile(tileId);
+  } else {
+    sound.play('uiTap');
+    selectedTile = tileId;
+    renderMyHand();
+  }
+}
+
+function discardTile(tileId) {
+  if (!canInteractWithHand()) {
+    selectedTile = null;
+    renderMyHand();
+    return;
+  }
+  sound.play('uiTap');
+  send({ type: 'discard_tile', tile: tileId });
+  selectedTile = null;
+}
+
+function showActions() {
+  const bar = document.getElementById('actionBar');
+  bar.style.display = 'flex';
+
+  document.getElementById('btnTsumo').style.display = actions.can_tsumo ? '' : 'none';
+  document.getElementById('btnRiichi').style.display = actions.can_declare_riichi ? '' : 'none';
+  document.getElementById('btnTenpai').style.display = actions.can_declare_tenpai ? '' : 'none';
+  document.getElementById('btnTenpai').textContent = actions.can_declare_damaten ? '默听' : '宣告听牌';
+  document.getElementById('btnPass').style.display = 'none';
+
+  // Kan options
+  const hasAnkan = actions.can_ankan && actions.can_ankan.length > 0;
+  const hasKakan = actions.can_kakan && actions.can_kakan.length > 0;
+  document.getElementById('btnKan').style.display = (hasAnkan || hasKakan) ? '' : 'none';
+  kanOptionsData = { ankan: actions.can_ankan || [], kakan: actions.can_kakan || [] };
+
+  // Hide call buttons during own turn
+  document.getElementById('btnRon').style.display = 'none';
+  document.getElementById('btnChi').style.display = 'none';
+  document.getElementById('btnPon').style.display = 'none';
+}
+
+function showCallActions() {
+  const bar = document.getElementById('actionBar');
+  bar.style.display = 'flex';
+
+  document.getElementById('btnRon').style.display = actions.can_ron ? '' : 'none';
+  document.getElementById('btnChi').style.display = actions.can_chi ? '' : 'none';
+  document.getElementById('btnPon').style.display = actions.can_pon ? '' : 'none';
+
+  const hasMinkan = actions.can_minkan;
+  document.getElementById('btnKan').style.display = hasMinkan ? '' : 'none';
+  if (hasMinkan) {
+    kanOptionsData = { ankan: [], kakan: [], minkan: true };
+  }
+
+  document.getElementById('btnPass').style.display = '';
+
+  // Hide own-turn buttons
+  document.getElementById('btnTsumo').style.display = 'none';
+  document.getElementById('btnRiichi').style.display = 'none';
+  document.getElementById('btnTenpai').style.display = 'none';
+
+  chiOptionsData = actions.can_chi || [];
+}
+
+function hideActions() {
+  document.getElementById('actionBar').style.display = 'none';
+  ['btnTsumo','btnRon','btnChi','btnPon','btnKan','btnRiichi','btnTenpai','btnPass'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+}
+
+function doAction(action) {
+  sound.play('uiTap');
+  switch (action) {
+    case 'tsumo':
+      send({ type: 'tsumo' });
+      break;
+    case 'ron':
+      send({ type: 'call_ron' });
+      break;
+    case 'pon':
+      send({ type: 'call_pon' });
+      break;
+    case 'pass':
+      send({ type: 'call_pass' });
+      break;
+    case 'declare_riichi':
+      send({ type: 'declare_riichi' });
+      break;
+    case 'declare_tenpai':
+      send({ type: actions.can_declare_damaten ? 'declare_damaten' : 'declare_tenpai' });
+      break;
+  }
+  hideActions();
+}
+
+function showChiOptions() {
+  if (chiOptionsData.length === 1) {
+    sound.play('uiTap');
+    send({ type: 'call_chi', tiles: chiOptionsData[0] });
+    hideActions();
+    return;
+  }
+  const container = document.getElementById('chiOptions');
+  container.innerHTML = '';
+  for (const opt of chiOptionsData) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-action-call';
+    btn.style.display = 'flex';
+    btn.style.gap = '4px';
+    btn.style.justifyContent = 'center';
+    btn.style.padding = '8px 16px';
+    for (const t of opt) {
+      btn.appendChild(createTileElement(t, { size: 'mini' }));
+    }
+    btn.addEventListener('click', () => {
+      sound.play('uiTap');
+      send({ type: 'call_chi', tiles: opt });
+      document.getElementById('chiPanel').style.display = 'none';
+      hideActions();
+    });
+    container.appendChild(btn);
+  }
+  document.getElementById('chiPanel').style.display = 'flex';
+}
+
+function showKanOptions() {
+  const allOpts = [];
+
+  for (const group of kanOptionsData.ankan) {
+    allOpts.push({ label: '暗杠', action: () => send({ type: 'ankan', tiles: group }), tiles: group });
+  }
+  for (const [meld, extra] of kanOptionsData.kakan) {
+    allOpts.push({ label: '加杠', action: () => send({ type: 'kakan', tile: extra }), tiles: meld.tiles.concat([extra]) });
+  }
+  if (kanOptionsData.minkan) {
+    allOpts.push({ label: '明杠', action: () => send({ type: 'call_minkan' }) });
+  }
+
+  if (allOpts.length === 1) {
+    sound.play('uiTap');
+    allOpts[0].action();
+    hideActions();
+    return;
+  }
+
+  const container = document.getElementById('kanOptions');
+  container.innerHTML = '';
+  for (const opt of allOpts) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-action-call';
+    btn.style.padding = '8px 16px';
+    btn.textContent = opt.label;
+    if (opt.tiles) {
+      btn.textContent += ' ';
+      for (const t of opt.tiles) {
+        btn.appendChild(createTileElement(t, { size: 'mini' }));
+      }
+    }
+    btn.addEventListener('click', () => {
+      sound.play('uiTap');
+      opt.action();
+      document.getElementById('kanPanel').style.display = 'none';
+      hideActions();
+    });
+    container.appendChild(btn);
+  }
+  document.getElementById('kanPanel').style.display = 'flex';
+}
+
+// ====================== Phase 2 Guess ======================
+function getDeclarerDiscardTypes() {
+  const discards = state.tenpaiDeclarer === state.mySeat ? state.myDiscards : state.oppDiscards;
+  return new Set((discards || []).map((tileId) => tileType(tileId)));
+}
+
+function getGuessSystemDisabledTypes(alreadyGuessed = state.phase2GuessedTypes || []) {
+  const guessed = new Set(alreadyGuessed || []);
+  const discarded = getDeclarerDiscardTypes();
+  const blocked = new Set([...guessed, ...discarded]);
+  return { guessed, discarded, blocked };
+}
+
+function getGuessSelectableTypes(alreadyGuessed = state.phase2GuessedTypes || []) {
+  const { blocked } = getGuessSystemDisabledTypes(alreadyGuessed);
+  const selectable = [];
+  for (let tt = 0; tt < 34; tt++) {
+    if (!blocked.has(tt)) selectable.push(tt);
+  }
+  return selectable;
+}
+
+function normalizeGuessUiState() {
+  const { blocked } = getGuessSystemDisabledTypes();
+  for (const tileTypeValue of Array.from(guessMarked)) {
+    if (blocked.has(tileTypeValue)) {
+      guessMarked.delete(tileTypeValue);
+    }
+  }
+  for (const tileTypeValue of Array.from(guessSelected)) {
+    if (blocked.has(tileTypeValue) || guessMarked.has(tileTypeValue)) {
+      guessSelected.delete(tileTypeValue);
+    }
+  }
+}
+
+function updateGuessPanelMeta() {
+  const panel = document.getElementById('guessPanel');
+  if (!panel) return;
+
+  const countEl = document.getElementById('guessCount');
+  const confirmBtn = document.getElementById('guessConfirm');
+  const skipBtn = document.getElementById('guessSkip');
+  const subtitleEl = document.getElementById('guessSubtitle');
+  const toggleBtn = document.getElementById('guessToggle');
+  const selectBtn = document.getElementById('guessModeSelect');
+  const markBtn = document.getElementById('guessModeMark');
+  const clearBtn = document.getElementById('guessClearMarks');
+  const markedCount = guessMarked.size;
+  const selectableCount = getGuessSelectableTypes().length;
+  const requiredCount = Math.min(2, selectableCount);
+
+  panel.classList.toggle('minimized', guessPanelMinimized);
+  panel.classList.toggle('mark-mode', guessMode === 'mark');
+  countEl.textContent = markedCount > 0
+    ? `已选: ${guessSelected.size} / ${requiredCount} · 已排除: ${markedCount}`
+    : `已选: ${guessSelected.size} / ${requiredCount}`;
+  confirmBtn.disabled = requiredCount === 0 || guessSelected.size !== requiredCount;
+  confirmBtn.style.display = requiredCount > 0 ? '' : 'none';
+  skipBtn.style.display = requiredCount === 0 ? '' : 'none';
+  skipBtn.disabled = requiredCount !== 0;
+  subtitleEl.textContent = guessMode === 'mark'
+    ? '标记仅对你自己可见，再点一次即可撤回。'
+    : (requiredCount === 0
+      ? '系统已无可选牌，可直接跳过本轮猜牌。'
+      : (requiredCount === 1
+        ? '系统会禁用已猜过和听牌者已打出的牌。当前只剩1张可选。'
+        : '系统会禁用已猜过和听牌者已打出的牌。'));
+  toggleBtn.textContent = guessPanelMinimized ? '展开' : '最小化';
+  selectBtn.classList.toggle('active', guessMode === 'select');
+  markBtn.classList.toggle('active', guessMode === 'mark');
+  clearBtn.disabled = markedCount === 0;
+}
+
+function renderGuessTiles() {
+  const container = document.getElementById('guessTiles');
+  container.innerHTML = '';
+  normalizeGuessUiState();
+
+  const { guessed, discarded, blocked } = getGuessSystemDisabledTypes();
+  const groups = [
+    { label: '万子', start: 0, end: 9 },
+    { label: '筒子', start: 9, end: 18 },
+    { label: '索子', start: 18, end: 27 },
+    { label: '字牌', start: 27, end: 34 },
+  ];
+
+  for (const g of groups) {
+    const suitGroup = document.createElement('div');
+    suitGroup.className = 'guess-suit-group';
+
+    const label = document.createElement('div');
+    label.className = 'guess-suit-label';
+    label.textContent = g.label;
+    suitGroup.appendChild(label);
+
+    const tilesRow = document.createElement('div');
+    tilesRow.className = 'guess-suit-tiles';
+    for (let tt = g.start; tt < g.end; tt++) {
+      const isGuessed = guessed.has(tt);
+      const isDiscarded = discarded.has(tt);
+      const isMarked = guessMarked.has(tt);
+      const isSelected = guessSelected.has(tt);
+      const el = createTileTypeElement(tt, { size: 'small', clickable: !blocked.has(tt) });
+
+      if (isSelected) {
+        el.classList.add('selected');
+      }
+      if (isGuessed) {
+        el.classList.add('guessed');
+      }
+      if (isDiscarded) {
+        el.classList.add('discard-blocked');
+      }
+      if (isMarked) {
+        el.classList.add('marked');
+      }
+
+      if (isGuessed && isDiscarded) {
+        el.title = '已猜过，且宣听者已打出';
+      } else if (isGuessed) {
+        el.title = '已猜过';
+      } else if (isDiscarded) {
+        el.title = '宣听者已打出';
+      } else if (isMarked) {
+        el.title = '你标记为可排除，再点一次可撤回';
+      } else if (guessMode === 'mark') {
+        el.title = '点击切换排除标记';
+      } else {
+        el.title = '点击选择猜测牌';
+      }
+
+      if (!blocked.has(tt)) {
+        el.addEventListener('click', () => handleGuessTileClick(tt));
+      }
+      tilesRow.appendChild(el);
+    }
+    suitGroup.appendChild(tilesRow);
+    container.appendChild(suitGroup);
+  }
+
+  updateGuessPanelMeta();
+}
+
+function setGuessMode(mode) {
+  const nextMode = mode === 'mark' ? 'mark' : 'select';
+  if (guessMode === nextMode) return;
+  sound.play('uiTap');
+  guessMode = nextMode;
+  renderGuessTiles();
+}
+
+function clearMarkedGuessTiles() {
+  if (guessMarked.size === 0) return;
+  sound.play('uiTap');
+  guessMarked.clear();
+  renderGuessTiles();
+}
+
+function toggleGuessPanelMinimized() {
+  sound.play('uiTap');
+  guessPanelMinimized = !guessPanelMinimized;
+  updateGuessPanelMeta();
+}
+
+function handleGuessTileClick(tt) {
+  const { blocked } = getGuessSystemDisabledTypes();
+  if (blocked.has(tt)) return;
+
+  if (guessMode === 'mark') {
+    sound.play('uiTap');
+    if (guessMarked.has(tt)) {
+      guessMarked.delete(tt);
+    } else {
+      guessMarked.add(tt);
+      guessSelected.delete(tt);
+    }
+    renderGuessTiles();
+    return;
+  }
+
+  if (guessMarked.has(tt)) {
+    return;
+  }
+  if (guessSelected.has(tt)) {
+    sound.play('uiTap');
+    guessSelected.delete(tt);
+  } else {
+    const requiredCount = Math.min(2, getGuessSelectableTypes().length);
+    if (guessSelected.size >= requiredCount) return;
+    sound.play('uiTap');
+    guessSelected.add(tt);
+  }
+  renderGuessTiles();
+}
+
+function openGuessPanel(message, alreadyGuessed = []) {
+  phase2GuessMessage = message || '请选择2张牌进行猜测';
+  guessSelected.clear();
+  guessMode = 'select';
+  guessPanelMinimized = false;
+  state.phase2GuessedTypes = alreadyGuessed || state.phase2GuessedTypes || [];
+  document.getElementById('guessTitle').textContent = phase2GuessMessage;
+  renderGuessTiles();
+  document.getElementById('guessPanel').style.display = 'block';
+}
+
+function submitGuess() {
+  const requiredCount = Math.min(2, getGuessSelectableTypes().length);
+  if (requiredCount === 0 || guessSelected.size !== requiredCount) return;
+  sound.play('uiTap');
+  send({ type: 'phase2_guess', tiles: Array.from(guessSelected) });
+  guessSelected.clear();
+  updateGuessPanelMeta();
+  document.getElementById('guessPanel').style.display = 'none';
+}
+
+function skipGuess() {
+  if (getGuessSelectableTypes().length !== 0) return;
+  sound.play('uiTap');
+  send({ type: 'phase2_guess', tiles: [] });
+  guessSelected.clear();
+  updateGuessPanelMeta();
+  document.getElementById('guessPanel').style.display = 'none';
+}
+
+// ====================== Helpers ======================
+function formatPointsRows(myPts, oppPts, myDelta, oppDelta) {
+  return `
+    <div class="result-points-row">
+      <span class="result-player-name">你</span>
+      <span class="result-player-value">${myPts} <span class="${myDelta >= 0 ? 'points-change-positive' : 'points-change-negative'}">(${myDelta >= 0 ? '+' : ''}${myDelta})</span></span>
+    </div>
+    <div class="result-points-row">
+      <span class="result-player-name">${state.oppName}</span>
+      <span class="result-player-value">${oppPts} <span class="${oppDelta >= 0 ? 'points-change-positive' : 'points-change-negative'}">(${oppDelta >= 0 ? '+' : ''}${oppDelta})</span></span>
+    </div>
+  `;
+}
+
+function formatWinScoreBreakdown({ han, fu, handPoints, honbaBonus, riichiBonus, totalGain }) {
+  const rows = [
+    `<div class="result-score-line">${han}番 ${fu}符</div>`,
+    `<div class="result-breakdown-row"><span>和牌点</span><span>${handPoints}点</span></div>`,
+  ];
+
+  if (honbaBonus > 0) {
+    rows.push(`<div class="result-breakdown-row"><span>本场加点</span><span>+${honbaBonus}点</span></div>`);
+  }
+  if (riichiBonus > 0) {
+    rows.push(`<div class="result-breakdown-row"><span>立直棒加点</span><span>+${riichiBonus}点</span></div>`);
+  }
+
+  rows.push(`<div class="result-breakdown-total">合计获得 ${totalGain}点</div>`);
+  return rows.join('');
+}
+
+function yakuHanLabel(yakuText) {
+  const match = String(yakuText).match(/\s(\d+)$/);
+  if (!match) return '';
+  return `${match[1]}番`;
+}
+
+const YAKU_TRANSLATE = {
+  'Menzen Tsumo': '门前清自摸和',
+  'Riichi': '立直',
+  'Ippatsu': '一发',
+  'Chankan': '抢杠',
+  'Rinshan Kaihou': '岭上开花',
+  'Haitei Raoyue': '海底摸月',
+  'Houtei Raoyui': '河底捞鱼',
+  'Pinfu': '平和',
+  'Tanyao': '断幺九',
+  'Iipeiko': '一杯口',
+  'Ton': '场风 东',
+  'Nan': '场风 南',
+  'Sha': '场风 西',
+  'Pei': '场风 北',
+  'Yakuhai (wind of place)': '自风',
+  'Yakuhai (hatsu)': '役牌 发',
+  'Yakuhai (haku)': '役牌 白',
+  'Yakuhai (chun)': '役牌 中',
+  'Hatsu': '役牌 发',
+  'Haku': '役牌 白',
+  'Chun': '役牌 中',
+  'Double Riichi': '两立直',
+  'Chanta': '混全带幺九',
+  'Ittsu': '一气通贯',
+  'San Shoku Doujun': '三色同顺',
+  'San Shoku Doukou': '三色同刻',
+  'Sankantsu': '三杠子',
+  'Toitoi': '对对和',
+  'Sanankou': '三暗刻',
+  'Shousangen': '小三元',
+  'Honroutou': '混老头',
+  'Ryanpeikou': '两杯口',
+  'Junchan': '纯全带幺九',
+  'Honitsu': '混一色',
+  'Chinitsu': '清一色',
+  'Renhou': '人和',
+  'Tenhou': '天和',
+  'Chiihou': '地和',
+  'Daisangen': '大三元',
+  'Suuankou': '四暗刻',
+  'Suuankou Tanki': '四暗刻单骑',
+  'Tsuuiisou': '字一色',
+  'Ryuuiisou': '绿一色',
+  'Chinroutou': '清老头',
+  'Kokushi': '国士无双',
+  'Kokushi Musou Juusanmen': '国士无双十三面',
+  'Daisuushi': '大四喜',
+  'Shousuushi': '小四喜',
+  'Suukantsu': '四杠子',
+  'Chuuren Poutou': '九莲宝灯',
+  'Junsei Chuuren Poutou': '纯正九莲宝灯',
+  'Nagashi Mangan': '流局满贯',
+  'Dora': '宝牌',
+  'Aka Dora': '赤宝牌',
+  // Yakuhai wind variants
+  'Yakuhai (wind of round)': '场风',
+  'East': '东',
+  'South': '南',
+  'West': '西',
+  'North': '北',
+  'Player Wind': '自风',
+  'Round Wind': '场风',
+  'Chiitoitsu': '七对子',
+  'Daburu Riichi': '两立直',
+  'Houtei Raoyui': '河底捞鱼',
+  'Haitei': '海底摸月',
+  'Honroutou': '混老头',
+};
+
+function translateYaku(name) {
+  // Try exact match, then try partial
+  if (YAKU_TRANSLATE[name]) return YAKU_TRANSLATE[name];
+  // Handle "Dora 2" etc.
+  const doraMatch = name.match(/^Dora (\d+)$/);
+  if (doraMatch) return `宝牌 ${doraMatch[1]}`;
+  return name;
+}
+
+function showToast(text, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity 0.3s';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 300);
+  }, 2700);
+}
+
+// ====================== Init ======================
+connectWS();
+ensureTimerTick();
+</script>
+</body>
+</html>

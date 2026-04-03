@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>二人麻雀 - 大厅</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=20260403g">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+  <script src="/static/js/audio-manager.js?v=20260403g"></script>
+</head>
+<body>
+  <div class="lobby-container" id="app">
+    <div class="lobby-header">
+      <h1>🀄 大厅</h1>
+      <div class="user-info">
+        <span id="usernameDisplay"></span>
+        <button class="btn-secondary" onclick="logout()" style="margin-left:12px;padding:4px 12px;font-size:12px">退出登录</button>
+      </div>
+    </div>
+
+    <div class="audio-controls audio-controls-lobby" id="audioControls">
+      <button class="btn-secondary audio-toggle" id="audioMuteToggle" type="button">声音开</button>
+      <label class="audio-slider">SE
+        <input type="range" id="audioSeVolume" min="0" max="100" step="5">
+      </label>
+      <label class="audio-slider">BGM
+        <input type="range" id="audioBgmVolume" min="0" max="100" step="5">
+      </label>
+      <span class="audio-status" id="audioStatus">待启用</span>
+    </div>
+
+    <div class="create-room-section">
+      <h2>创建对局</h2>
+      <div class="timer-input">
+        <label>限时:</label>
+        <input type="number" id="timerMinutes" value="30" min="5" max="120" step="5">
+        <span>分</span>
+      </div>
+      <button class="btn-primary" id="createBtn" onclick="createRoom()">创建房间</button>
+      <p id="connectionStatus" style="margin-top:10px;color:var(--text-dim);font-size:13px">正在连接服务器...</p>
+
+      <div id="myRoomStatus" class="room-card" style="display:none;margin-top:14px;">
+        <div class="info">
+          <div id="myRoomTitle">已进入房间，等待对手...</div>
+          <div class="id" id="myRoomId"></div>
+        </div>
+        <button class="btn-secondary" onclick="leaveRoom()">离开房间</button>
+      </div>
+    </div>
+
+    <div class="rooms-section">
+      <h2>等待中的房间</h2>
+      <div id="roomsList"></div>
+      <p id="noRooms" style="color:var(--text-dim);font-size:14px">暂无等待中的房间</p>
+    </div>
+
+    <!-- Waiting overlay -->
+    <div class="waiting-overlay" id="waitingOverlay" style="display:none">
+      <div class="waiting-box">
+        <h2 id="waitingTitle">已进入房间，等待对手...</h2>
+        <div class="spinner"></div>
+        <p style="color:var(--text-dim);font-size:14px" id="waitingRoom"></p>
+        <button class="btn-secondary" style="margin-top:14px" onclick="leaveRoom()">取消等待</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const token = sessionStorage.getItem('token');
+    const username = sessionStorage.getItem('username');
+
+    if (!token) {
+      window.location.href = '/';
+    }
+    document.getElementById('usernameDisplay').textContent = username;
+
+    let ws = null;
+    let currentRoom = null;
+    let reconnectTimer = null;
+    let isConnected = false;
+    const pendingMessages = [];
+    const sound = window.createFutariAudioManager({ defaultSeVolume: 0.45, defaultBgmVolume: 0.30 });
+
+    sound.bindControls();
+    sound.playBgm('lobby', { gain: 1, fadeMs: 220 });
+
+    function connectWS() {
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`);
+      ws = socket;
+      updateConnectionUi();
+
+      socket.onopen = () => {
+        if (ws !== socket) {
+          socket.close();
+          return;
+        }
+        isConnected = true;
+        updateConnectionUi();
+        flushPendingMessages();
+        sendMessage({ type: 'list_rooms' }, { queueIfDisconnected: false, reconnectIfNeeded: false });
+      };
+
+      socket.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data);
+        handleMessage(msg);
+      };
+
+      socket.onclose = (ev) => {
+        if (ws === socket) {
+          ws = null;
+        }
+        isConnected = false;
+        updateConnectionUi();
+
+        if (ev.code === 4001) {
+          // Token invalid
+          sessionStorage.removeItem('token');
+          sessionStorage.removeItem('username');
+          window.location.href = '/';
+          return;
+        }
+
+        // Network hiccups (e.g. 1006) should reconnect instead of forcing logout.
+        scheduleReconnect();
+      };
+
+      socket.onerror = () => {
+        updateConnectionUi();
+      };
+    }
+
+    function scheduleReconnect() {
+      if (reconnectTimer) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectWS();
+      }, 1500);
+    }
+
+    function flushPendingMessages() {
+      while (pendingMessages.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
+        const message = pendingMessages.shift();
+        try {
+          ws.send(message);
+        } catch {
+          pendingMessages.unshift(message);
+          isConnected = false;
+          updateConnectionUi();
+          scheduleReconnect();
+          break;
+        }
+      }
+    }
+
+    function sendMessage(payload, options = {}) {
+      const { queueIfDisconnected = true, reconnectIfNeeded = true } = options;
+      const message = JSON.stringify(payload);
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(message);
+          return true;
+        } catch {
+          isConnected = false;
+          updateConnectionUi();
+        }
+      }
+
+      if (queueIfDisconnected) {
+        pendingMessages.push(message);
+      }
+      if (reconnectIfNeeded) {
+        scheduleReconnect();
+        connectWS();
+      }
+      return false;
+    }
+
+    function updateConnectionUi() {
+      const statusEl = document.getElementById('connectionStatus');
+      const createBtn = document.getElementById('createBtn');
+
+      if (statusEl) {
+        if (isConnected) {
+          statusEl.textContent = '已连接服务器';
+          statusEl.style.color = 'var(--text-dim)';
+        } else {
+          statusEl.textContent = pendingMessages.length > 0
+            ? '连接已断开，操作会在重连后自动发送...'
+            : '正在重连服务器...';
+          statusEl.style.color = 'var(--gold-light)';
+        }
+      }
+
+      if (createBtn) {
+        createBtn.disabled = !isConnected;
+      }
+
+      document.querySelectorAll('#roomsList button').forEach((button) => {
+        button.disabled = !isConnected;
+      });
+    }
+
+    function handleMessage(msg) {
+      switch (msg.type) {
+        case 'rooms_list':
+        case 'rooms_update':
+          renderRooms(msg.rooms || []);
+          break;
+        case 'room_created':
+          sound.play('uiConfirm');
+          currentRoom = msg.room;
+          window.location.href = '/game';
+          break;
+        case 'room_joined':
+          sound.play('uiConfirm');
+          currentRoom = msg.room;
+          window.location.href = '/game';
+          break;
+        case 'room_left':
+          currentRoom = null;
+          updateRoomStatus();
+          sendMessage({ type: 'list_rooms' });
+          break;
+        case 'round_start':
+        case 'game_state':
+          // Game started - redirect to game page
+          window.location.href = '/game';
+          break;
+        case 'error':
+          alert(msg.message);
+          break;
+      }
+    }
+
+    function renderRooms(rooms) {
+      const list = document.getElementById('roomsList');
+      const noRooms = document.getElementById('noRooms');
+      const waitingRooms = rooms.filter(r => !r.is_full);
+
+      if (waitingRooms.length === 0) {
+        list.innerHTML = '';
+        noRooms.style.display = 'block';
+        return;
+      }
+      noRooms.style.display = 'none';
+
+      list.innerHTML = waitingRooms.map(room => {
+        const players = room.players.filter(p => p).map(p => p.username).join(', ');
+        return `
+          <div class="room-card">
+            <div class="info">
+              <div>${players || '空位'}</div>
+              <div class="id">${room.room_id}</div>
+            </div>
+            <button class="btn-primary" onclick="joinRoom('${room.room_id}')" ${isConnected ? '' : 'disabled'}>加入</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function createRoom() {
+      const timer = parseInt(document.getElementById('timerMinutes').value) || 30;
+      sound.play('uiConfirm');
+      sendMessage({ type: 'create_room', timer_minutes: timer });
+    }
+
+    function joinRoom(roomId) {
+      sound.play('uiConfirm');
+      sendMessage({ type: 'join_room', room_id: roomId });
+    }
+
+    function leaveRoom() {
+      sound.play('uiCancel');
+      sendMessage({ type: 'leave_room' }, { queueIfDisconnected: false });
+    }
+
+    function updateRoomStatus() {
+      const box = document.getElementById('myRoomStatus');
+      const roomIdEl = document.getElementById('myRoomId');
+      if (!currentRoom) {
+        box.style.display = 'none';
+        roomIdEl.textContent = '';
+        return;
+      }
+      box.style.display = 'flex';
+      roomIdEl.textContent = `房间: ${currentRoom.room_id}`;
+    }
+
+    function logout() {
+      sound.play('uiCancel');
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('username');
+      window.location.href = '/';
+    }
+
+    connectWS();
+    updateConnectionUi();
+  </script>
+</body>
+</html>

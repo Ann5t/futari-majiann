@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "tile": "haku",
+  "model": "image-01",
+  "prompt": "A single original Japanese mahjong white dragon tile face, one tile only, front orthographic view, perfectly face-on, centered composition, full tile visible, no cropping, isolated on a plain solid pure white background. Clean ivory-white ceramic tile, premium glossy glaze, subtle beveled edges. The tile face is intentionally blank: no text, no glyphs, no readable marks. Include only a very subtle centered inner frame in pale cyan or very light blue, minimal and abstract. No letters, no runes, no logo, no corner numbers, no additional symbols. Negative constraints: multiple tiles, two tiles, stacked tiles, overlapping tiles, cropped tile, partial tile, perspective view, angled view, tilted view, isometric view, hand, fingers, table, cloth, tray, rack, dice, chips, background scene, patterned background, extra objects, extra symbols, extra glyphs, extra letters, extra numbers, tiny text, watermark, logo, signature, seal, caption, subtitles, frame border outside the tile, low legibility, off-center artwork, asymmetrical layout, distorted proportions, blur, low resolution",
+  "image_url": "https://hailuo-image-algeng-data.oss-cn-wulanchabu.aliyuncs.com/image_inference_output%2Ftalkie%2Fprod%2Fimg%2F2026-04-03%2F7bd55b3f-bfd7-4f69-98d7-20b7cb47af04_aigc.jpeg?Expires=1775303565&OSSAccessKeyId=LTAI5tB2SwrRwAtD23etQUbC&Signature=knjvlNjHum4l%2FpR4mS3QPTX1fRU%3D",
+  "file_path": "generated/tiles/single/haku.jpg",
+  "request_id": "061edcfe6e89a5d19ce837c91d108153",
+  "raw_response": {
+    "id": "061edcfe6e89a5d19ce837c91d108153",
+    "data": {
+      "image_urls": [
+        "https://hailuo-image-algeng-data.oss-cn-wulanchabu.aliyuncs.com/image_inference_output%2Ftalkie%2Fprod%2Fimg%2F2026-04-03%2F7bd55b3f-bfd7-4f69-98d7-20b7cb47af04_aigc.jpeg?Expires=1775303565&OSSAccessKeyId=LTAI5tB2SwrRwAtD23etQUbC&Signature=knjvlNjHum4l%2FpR4mS3QPTX1fRU%3D"
+      ]
+    },
+    "metadata": {
+      "failed_count": "0",
+      "success_count": "1"
+    },
+    "base_resp": {
+      "status_code": 0,
+      "status_msg": "success"
+    }
+  }
+}

@@ -1,0 +1,114 @@
+[
+  {
+    "name": "bgm_lobby_calm_loop_v1",
+    "category": "bgm",
+    "output": "frontend/assets/audio/bgm/bgm_lobby_calm_loop_v1.wav",
+    "prompt": "二人麻将网页大厅背景音乐，日式现代和风电子，88 BPM 左右，温润木质打击、轻拨弦、空气感合成器、极轻鼓点，氛围清爽克制，有期待感但不过分热闹，不要人声，不要强主唱旋律，段落短小、前后衔接自然、适合无缝循环",
+    "lyrics": "[Inst]",
+    "keep_mode": "full"
+  },
+  {
+    "name": "bgm_room_ready_wait_loop_v1",
+    "category": "bgm",
+    "output": "frontend/assets/audio/bgm/bgm_room_ready_wait_loop_v1.wav",
+    "prompt": "二人麻将房间准备阶段背景音乐，轻悬念、轻脉冲、低存在感，木鱼质感点击、柔和低频脉冲、淡淡 pad，节奏有等待感但不催促，不要人声，不要激烈鼓组，结尾尽量干净，适合循环",
+    "lyrics": "[Inst]",
+    "keep_mode": "full"
+  },
+  {
+    "name": "bgm_match_main_loop_v1",
+    "category": "bgm",
+    "output": "frontend/assets/audio/bgm/bgm_match_main_loop_v1.wav",
+    "prompt": "二人麻将正式对局主背景音乐，日式竞技感与现代电子融合，98 BPM 左右，清晰节拍、木质敲击、低调贝斯、细碎拨弦，紧张但理性，不喧宾夺主，不要人声，不要大编制史诗感，要稳定推进、适合长循环",
+    "lyrics": "[Inst]",
+    "keep_mode": "full"
+  },
+  {
+    "name": "bgm_match_phase2_tense_loop_v1",
+    "category": "bgm",
+    "output": "frontend/assets/audio/bgm/bgm_match_phase2_tense_loop_v1.wav",
+    "prompt": "二人麻将终盘高压阶段背景音乐，在主对局风格上加压，106 BPM 左右，心跳式脉冲、短促弦乐纹理、微量金属打击，紧张感明显提升，但仍要克制，不要人声，不要过满编曲，适合短循环反复",
+    "lyrics": "[Inst]",
+    "keep_mode": "full"
+  },
+  {
+    "name": "se_tile_discard_01",
+    "category": "se",
+    "output": "frontend/assets/audio/se/se_tile_discard_01.wav",
+    "prompt": "麻将弃牌落桌音效，清晰的牌张接触桌面与轻微滑停，木质硬朗，落点明确，比摸牌更有重量，不要人声，不要旋律，主瞬态在前 0.6 秒内",
+    "lyrics": "[Inst]",
+    "keep_mode": "trim",
+    "target_seconds": 0.7,
+    "pre_roll_seconds": 0.02
+  },
+  {
+    "name": "se_ui_click_soft_01",
+    "category": "se",
+    "output": "frontend/assets/audio/se/se_ui_click_soft_01.wav",
+    "prompt": "麻将手牌选择提示音，轻巧、干净、贴近指尖触碰牌面的感觉，像木质小点击加极轻玻璃质感，短促不刺耳，不要人声，不要长旋律，主声音必须出现在前 0.3 秒内，适合频繁点击选择牌",
+    "lyrics": "[Inst]",
+    "keep_mode": "trim",
+    "target_seconds": 0.35,
+    "pre_roll_seconds": 0.01
+  },
+  {
+    "name": "se_tile_draw_01",
+    "category": "se",
+    "output": "frontend/assets/audio/se/se_tile_draw_01.wav",
+    "prompt": "麻将摸牌音效，接近真实牌张被手指带起的轻响，木质、纸感、细小摩擦，轻但清晰，不要人声，不要鼓点，不要长尾，核心声音在前 0.5 秒内",
+    "lyrics": "[Inst]",
+    "keep_mode": "trim",
+    "target_seconds": 0.45,
+    "pre_roll_seconds": 0.02
+  },
+  {
+    "name": "se_action_prompt_01",
+    "category": "se",
+    "output": "frontend/assets/audio/se/se_action_prompt_01.wav",
+    "prompt": "麻将可操作提示音，短促、清亮、立即抓注意力，像一枚小型玻璃或竹制提示铃，不能刺耳，不要人声，不要长旋律，第一击必须非常靠前",
+    "lyrics": "[Inst]",
+    "keep_mode": "trim",
+    "target_seconds": 0.85,
+    "pre_roll_seconds": 0.02
+  },
+  {
+    "name": "se_call_pon_01",
+    "category": "se",
+    "output": "frontend/assets/audio/se/se_call_pon_01.wav",
+    "prompt": "麻将鸣牌提示音，偏碰牌通用感，清脆有存在感，木质主击加一点金属边缘，像啪一下立住场面，不要人声，不要长句旋律，力量集中在前 0.8 秒",
+    "lyrics": "[Inst]",
+    "keep_mode": "trim",
+    "target_seconds": 1.0,
+    "pre_roll_seconds": 0.03
+  },
+  {
+    "name": "se_call_kan_01",
+    "category": "se",
+    "output": "frontend/assets/audio/se/se_call_kan_01.wav",
+    "prompt": "麻将杠牌提示音，明显比普通鸣牌更重、更有压迫感，双层击打或低频支撑，像桌面被更有力地敲定，不要人声，不要复杂编曲，主能量集中在前 1 秒",
+    "lyrics": "[Inst]",
+    "keep_mode": "trim",
+    "target_seconds": 1.2,
+    "pre_roll_seconds": 0.03
+  },
+  {
+    "name": "se_tenpai_alert_01",
+    "category": "se",
+    "output": "frontend/assets/audio/se/se_tenpai_alert_01.wav",
+    "prompt": "麻将听牌高优先级提示音，紧张但高级，短促上扬或锐利聚焦，像一束冷光点亮，不要人声，不要夸张胜利感，不要长旋律，核心提示在前 0.8 秒",
+    "lyrics": "[Inst]",
+    "keep_mode": "trim",
+    "target_seconds": 1.0,
+    "pre_roll_seconds": 0.03
+  },
+  {
+    "name": "se_result_win_01",
+    "category": "se",
+    "output": "frontend/assets/audio/se/se_result_win_01.wav",
+    "prompt": "麻将和牌胜利提示音，短小但有抬升感，明亮、利落、有成就感，和风电子或清脆打击结合，不要人声，不要完整长乐句，不要拖成背景音乐，高潮放在前 1.5 秒",
+    "lyrics": "[Inst]",
+    "keep_mode": "trim",
+    "target_seconds": 1.8,
+    "pre_roll_seconds": 0.03
+  }
+]
