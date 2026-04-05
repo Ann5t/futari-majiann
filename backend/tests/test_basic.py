@@ -3,6 +3,8 @@ import asyncio
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+import game.engine as engine_module
+
 from game.engine import GameEngine, Phase
 from game.room import Room
 from game.melds import Meld, MeldType
@@ -163,6 +165,16 @@ def test_concealed_kan_keeps_menzen_and_allows_riichi():
     assert h.is_open is False
     assert result is not None
     assert any('Riichi' in y for y in result.yaku), result.yaku
+
+def test_kakan_meld_serialization_includes_added_tile():
+    tiles = [17, 18, 19, 16]
+    meld = Meld(MeldType.KAKAN, tiles, called_tile=19)
+
+    data = meld.to_dict()
+
+    assert data['type'] == 'kakan'
+    assert data['called_tile'] == 19
+    assert data['added_tile'] == 16
 
 def test_open_hand_does_not_score_iipeiko():
     used = set()
@@ -479,6 +491,7 @@ async def _run_riichi_declaration_deducts_points_and_sets_sticks():
     draw_tile = _alloc_named_tiles(['8m'], used)[0]
 
     player = engine.players[0]
+    player.points = 2000
     player.hand.init_deal(closed)
     player.hand.add_draw(draw_tile)
     engine.phase = Phase.PHASE1_ACTION
@@ -489,7 +502,7 @@ async def _run_riichi_declaration_deducts_points_and_sets_sticks():
     assert player.declared_tenpai is True
     assert player.declared_riichi is True
     assert player.declared_daburu_riichi is True
-    assert player.points == 24000
+    assert player.points == 1000
     assert engine.riichi_sticks == 1
 
     state = engine.get_state_for_player(0)
@@ -547,6 +560,7 @@ async def _run_double_riichi_is_blocked_after_interruption():
     draw_tile = _alloc_named_tiles(['8m'], used)[0]
 
     player = engine.players[0]
+    player.points = 2000
     player.hand.init_deal(closed)
     player.hand.add_draw(draw_tile)
     engine.phase = Phase.PHASE1_ACTION
@@ -589,9 +603,9 @@ async def _run_nagashi_mangan_counts_honba_and_riichi_bonus():
     assert engine.round_result is not None
     assert engine.round_result.details['reason'] == 'nagashi_mangan'
     assert engine.round_result.details['winner'] == 1
-    assert engine.round_result.points_delta == {0: -6600, 1: 7600}
-    assert engine.players[0].points == 18400
-    assert engine.players[1].points == 32600
+    assert engine.round_result.points_delta == {0: 0, 1: 7600}
+    assert engine.players[0].points == 0
+    assert engine.players[1].points == 7600
     assert engine.dealer_seat == 1
     assert engine.honba_count == 0
     assert engine.riichi_sticks == 0
@@ -611,6 +625,80 @@ def test_nagashi_mangan_counts_honba_and_riichi_bonus():
     asyncio.run(_run_nagashi_mangan_counts_honba_and_riichi_bonus())
 
 
+async def _run_start_game_rolls_for_initial_dealer():
+    engine = GameEngine()
+    engine.add_player(1, 'p1')
+    engine.add_player(2, 'p2')
+    engine._roll_initial_dealer = lambda: {0: 2, 1: 6}
+
+    await engine.start_game()
+
+    assert engine.initial_dealer_rolls == {0: 2, 1: 6}
+    assert engine.dealer_seat == 1
+    assert engine.current_turn == 1
+    assert engine.players[0].is_dealer is False
+    assert engine.players[1].is_dealer is True
+
+    state = engine.get_state_for_player(0)
+    assert state['initial_dealer_rolls'] == {0: 2, 1: 6}
+
+    round_start = engine._round_start_data()
+    assert round_start['initial_dealer_rolls'] == {0: 2, 1: 6}
+
+
+def test_start_game_rolls_for_initial_dealer():
+    asyncio.run(_run_start_game_rolls_for_initial_dealer())
+
+
+def test_initial_dealer_roll_rerolls_ties():
+    engine = GameEngine()
+    rolls = iter([4, 4, 6, 2])
+    original_randint = engine_module.random.randint
+
+    try:
+        engine_module.random.randint = lambda start, end: next(rolls)
+        assert engine._roll_initial_dealer() == {0: 6, 1: 2}
+    finally:
+        engine_module.random.randint = original_randint
+
+
+async def _run_non_dealer_win_becomes_next_dealer():
+    engine = GameEngine()
+    engine.add_player(1, 'p1')
+    engine.add_player(2, 'p2')
+    engine.dealer_seat = 0
+    engine.players[0].is_dealer = True
+    engine.players[1].is_dealer = False
+
+    used = set()
+    closed = _alloc_named_tiles(['1m', '2m', '3m', '4p', '5p', '6p', '7s', '8s', '9s', '东', '东', '东', '南'], used)
+    win_tile = _alloc_named_tiles(['南'], used)[0]
+    winner = engine.players[1]
+    winner.hand.init_deal(closed)
+    winner.hand.add_draw(win_tile)
+
+    score = calculate_score(
+        winner.hand,
+        win_tile,
+        is_tsumo=True,
+        is_dealer=False,
+        round_wind_tt=27,
+        player_wind_tt=28,
+        dora_indicators=[],
+    )
+
+    await engine._end_round_win(1, score, True, win_tile)
+
+    assert engine.round_result is not None
+    assert engine.round_result.winner == 1
+    assert engine.dealer_seat == 1
+    assert engine.honba_count == 0
+
+
+def test_non_dealer_win_becomes_next_dealer():
+    asyncio.run(_run_non_dealer_win_becomes_next_dealer())
+
+
 def test_menzen_tenpai_serializes_riichi_action():
     engine = GameEngine()
     engine.add_player(1, 'p1')
@@ -621,6 +709,7 @@ def test_menzen_tenpai_serializes_riichi_action():
     draw_tile = _alloc_named_tiles(['8m'], used)[0]
 
     player = engine.players[0]
+    player.points = 2000
     player.hand.init_deal(closed)
     player.hand.add_draw(draw_tile)
     engine.phase = Phase.PHASE1_ACTION
@@ -632,7 +721,7 @@ def test_menzen_tenpai_serializes_riichi_action():
     assert state['actions']['can_declare_damaten'] is True
 
 
-async def _run_damaten_discard_stays_hidden():
+async def _run_damaten_declaration_enters_phase2_without_riichi():
     engine = GameEngine()
     engine.add_player(1, 'p1')
     engine.add_player(2, 'p2')
@@ -659,24 +748,28 @@ async def _run_damaten_discard_stays_hidden():
 
     await engine.action_declare_damaten(0)
 
-    assert 0 in engine._pending_damaten
-    assert player.declared_tenpai is False
+    assert player.declared_tenpai is True
+    assert player.declared_riichi is False
+    assert engine.tenpai_declarer == 0
     state = engine.get_state_for_player(0)
-    assert state['actions']['tenpai_mode'] == 'damaten'
+    assert state['actions']['tenpai_mode'] == 'public_tenpai'
+
+    tenpai_events = [event for event in events if event[0] == 'tenpai_declared']
+    assert tenpai_events
+    assert tenpai_events[-1][1]['riichi'] is False
 
     discard_tile = state['actions']['tenpai_discards'][0]
-    await engine.action_discard_after_damaten(0, discard_tile)
+    await engine.action_discard_after_tenpai(0, discard_tile)
 
-    assert 0 not in engine._pending_damaten
-    assert player.declared_tenpai is False
+    assert player.declared_tenpai is True
     assert player.declared_riichi is False
-    assert engine.tenpai_declarer is None
-    assert engine.phase != Phase.PHASE2_GUESS
-    assert not [event for event in events if event[0] == 'tenpai_declared']
+    assert engine.tenpai_declarer == 0
+    assert engine.phase == Phase.PHASE2_GUESS
+    assert [event for event in events if event[0] == 'phase2_start']
 
 
-def test_damaten_discard_stays_hidden():
-    asyncio.run(_run_damaten_discard_stays_hidden())
+def test_damaten_declaration_enters_phase2_without_riichi():
+    asyncio.run(_run_damaten_declaration_enters_phase2_without_riichi())
 
 
 async def _build_controlled_phase2_engine():
@@ -828,8 +921,8 @@ async def _run_phase2_guess_hit_is_zero_point_draw_and_reveals_indicators():
     assert engine.round_result is not None
     assert engine.round_result.result_type == 'draw'
     assert engine.round_result.points_delta == {0: 0, 1: 0}
-    assert engine.players[0].points == 25000
-    assert engine.players[1].points == 25000
+    assert engine.players[0].points == 0
+    assert engine.players[1].points == 0
     assert engine.round_result.details['reason'] == 'phase2_guess_hit'
 
     round_result_events = [event for event in events if event[0] == 'round_result']
@@ -843,6 +936,23 @@ async def _run_phase2_guess_hit_is_zero_point_draw_and_reveals_indicators():
 
 def test_phase2_guess_hit_is_zero_point_draw_and_reveals_indicators():
     asyncio.run(_run_phase2_guess_hit_is_zero_point_draw_and_reveals_indicators())
+
+
+async def _run_zero_point_start_does_not_end_match():
+    engine = GameEngine()
+    engine.add_player(1, 'p1')
+    engine.add_player(2, 'p2')
+
+    await engine._end_round_draw(reason='exhaustive')
+
+    assert engine.phase == Phase.ROUND_END
+    assert engine.game_over is False
+    assert engine.players[0].points == 0
+    assert engine.players[1].points == 0
+
+
+def test_zero_point_start_does_not_end_match():
+    asyncio.run(_run_zero_point_start_does_not_end_match())
 
 
 async def _run_phase2_declined_winning_tile_is_hidden_and_sets_furiten():
@@ -1047,6 +1157,61 @@ async def _run_phase2_kakan_is_allowed_when_waits_stay_locked():
 def test_phase2_kakan_is_allowed_when_waits_stay_locked():
     asyncio.run(_run_phase2_kakan_is_allowed_when_waits_stay_locked())
 
+
+async def _run_phase1_kakan_four_kan_abort_keeps_points_and_emits_kan_declared():
+    engine = GameEngine()
+    engine.add_player(1, 'p1')
+    engine.add_player(2, 'p2')
+
+    events = []
+
+    async def capture(event_type, data, target_seat=None):
+        events.append((event_type, data, target_seat))
+
+    engine.set_notify(capture)
+
+    used = set()
+    actor_closed = _alloc_named_tiles(['1p', '2p', '3p', '1s', '2s', '3s'], used)
+    actor_draw = _alloc_named_tiles(['5m'], used)[0]
+    actor_ankan = _alloc_named_tiles(['东', '东', '东', '东'], used)
+    actor_pon = _alloc_named_tiles(['5m', '5m', '5m'], used)
+    opponent_closed = _alloc_named_tiles(['7m', '8m', '9m', '白', '发'], used)
+    opp_ankan_1 = _alloc_named_tiles(['南', '南', '南', '南'], used)
+    opp_ankan_2 = _alloc_named_tiles(['西', '西', '西', '西'], used)
+
+    actor = engine.players[0]
+    opponent = engine.players[1]
+    actor.points = 25000
+    opponent.points = 25000
+    actor.hand.init_deal(actor_closed)
+    actor.hand.melds = [Meld(MeldType.ANKAN, actor_ankan), Meld(MeldType.PON, actor_pon, called_tile=actor_pon[2])]
+    actor.hand.add_draw(actor_draw)
+    opponent.hand.init_deal(opponent_closed)
+    opponent.hand.melds = [Meld(MeldType.ANKAN, opp_ankan_1), Meld(MeldType.ANKAN, opp_ankan_2)]
+
+    engine.phase = Phase.PHASE1_ACTION
+    engine.current_turn = 0
+    engine._total_kan_count = 3
+
+    await engine.action_kakan(0, actor_draw)
+
+    kan_events = [event for event in events if event[0] == 'kan_declared']
+    result_events = [event for event in events if event[0] == 'round_result']
+
+    assert kan_events
+    assert kan_events[-1][1]['type'] == 'kakan'
+    assert result_events
+    assert result_events[-1][1]['reason'] == 'four_kan_abort'
+    assert engine.round_result is not None
+    assert engine.round_result.details['reason'] == 'four_kan_abort'
+    assert engine.round_result.points_delta == {0: 0, 1: 0}
+    assert actor.points == 25000
+    assert opponent.points == 25000
+
+
+def test_phase1_kakan_four_kan_abort_keeps_points_and_emits_kan_declared():
+    asyncio.run(_run_phase1_kakan_four_kan_abort_keeps_points_and_emits_kan_declared())
+
 def test_phase1_action_actions_serialized_for_current_turn():
     engine = GameEngine()
     engine.add_player(1, 'p1')
@@ -1163,6 +1328,55 @@ async def _run_waiting_disconnect_clears_ghost_ready():
 
 def test_waiting_disconnect_clears_ghost_ready():
     asyncio.run(_run_waiting_disconnect_clears_ghost_ready())
+
+
+class _DummySocket:
+    def __init__(self):
+        self.messages = []
+
+    async def send_json(self, data):
+        self.messages.append(data)
+
+
+async def _run_game_over_room_can_reconfigure_and_restart():
+    room = Room('rematch-room')
+    ws1 = _DummySocket()
+    ws2 = _DummySocket()
+    room.add_player(1, 'host', ws1)
+    room.add_player(2, 'guest', ws2)
+
+    room.engine.phase = Phase.GAME_OVER
+    room.engine.game_over = True
+    room.engine.timer_minutes = 30
+
+    assert room.set_timer_minutes(2, 45) is False
+    assert room.set_timer_minutes(1, 45) is True
+    assert room.engine.timer_minutes == 45
+
+    assert room.set_waiting_ready(1, True) is True
+    assert room.set_waiting_ready(2, True) is True
+
+    await room.try_start()
+
+    assert room.engine.game_over is False
+    assert room.engine.timer_minutes == 45
+    assert room.engine.round_number == 1
+    assert room.engine.phase != Phase.GAME_OVER
+
+
+def test_game_over_room_can_reconfigure_and_restart():
+    asyncio.run(_run_game_over_room_can_reconfigure_and_restart())
+
+
+def test_game_over_leave_transfers_room_owner():
+    room = Room('owner-room')
+    room.add_player(1, 'host', _DummySocket())
+    room.add_player(2, 'guest', _DummySocket())
+    room.engine.phase = Phase.GAME_OVER
+
+    assert room.owner_user_id == 1
+    assert room.leave_player(1) is True
+    assert room.owner_user_id == 2
 
 if __name__ == '__main__':
     from test_test_hooks import (

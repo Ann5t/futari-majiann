@@ -16,6 +16,7 @@ class Room:
         self.player_sockets: dict[int, object] = {}  # seat -> websocket
         self.user_to_seat: dict[int, int] = {}  # user_id -> seat
         self.ready_seats: set[int] = set()  # waiting-room ready states
+        self.owner_user_id: int | None = None
         self._timer_task: asyncio.Task | None = None
 
         # Wire up engine notifications
@@ -32,12 +33,21 @@ class Room:
             for seat, ws in self.player_sockets.items():
                 await ws.send_json({"type": event_type, **data})
 
+        if event_type == "round_start":
+            self.ready_seats.clear()
+        elif event_type == "game_over":
+            status_payload = {"type": "room_status", **self.waiting_status()}
+            for ws in self.player_sockets.values():
+                await ws.send_json(status_payload)
+
     def add_player(self, user_id: int, username: str, websocket) -> int | None:
         """Add a player to the room. Returns seat or None."""
         seat = self.engine.add_player(user_id, username)
         if seat is not None:
             self.player_sockets[seat] = websocket
             self.user_to_seat[user_id] = seat
+            if self.owner_user_id is None:
+                self.owner_user_id = user_id
             self.ready_seats.discard(seat)
         return seat
 
@@ -62,13 +72,16 @@ class Room:
         seat = self.user_to_seat.get(user_id)
         if seat is None:
             return False
-        if self.engine.phase != Phase.WAITING:
+        if self.engine.phase not in (Phase.WAITING, Phase.GAME_OVER):
             return False
 
         self.player_sockets.pop(seat, None)
         self.user_to_seat.pop(user_id, None)
         self.engine.players[seat] = None
         self.ready_seats.discard(seat)
+        if self.owner_user_id == user_id:
+            remaining_players = [p.user_id for p in self.engine.players if p is not None]
+            self.owner_user_id = remaining_players[0] if remaining_players else None
         return True
 
     def is_empty(self) -> bool:
@@ -76,27 +89,58 @@ class Room:
 
     async def try_start(self):
         """Start the game if both players are present."""
-        if (
+        ready_to_start = (
             self.engine.both_joined()
-            and self.engine.phase == Phase.WAITING
             and 0 in self.player_sockets
             and 1 in self.player_sockets
             and 0 in self.ready_seats
             and 1 in self.ready_seats
-        ):
+        )
+        if not ready_to_start:
+            return
+
+        if self.engine.phase == Phase.GAME_OVER:
+            self.reset_for_rematch()
+
+        if self.engine.phase == Phase.WAITING:
             await self.engine.start_game()
             self._start_timer()
 
     def set_waiting_ready(self, user_id: int, ready: bool) -> bool:
         """Set player's waiting-room ready state. Returns False if not allowed."""
         seat = self.user_to_seat.get(user_id)
-        if seat is None or self.engine.phase != Phase.WAITING:
+        if seat is None or self.engine.phase not in (Phase.WAITING, Phase.GAME_OVER):
             return False
         if ready:
             self.ready_seats.add(seat)
         else:
             self.ready_seats.discard(seat)
         return True
+
+    def set_timer_minutes(self, user_id: int, timer_minutes: int) -> bool:
+        """Update room timer configuration. Only the room owner can change it."""
+        if self.owner_user_id != user_id:
+            return False
+        if self.engine.phase not in (Phase.WAITING, Phase.GAME_OVER):
+            return False
+        self.engine.timer_minutes = timer_minutes
+        return True
+
+    def reset_for_rematch(self):
+        """Recreate the engine while keeping players and sockets in the same room."""
+        timer_minutes = self.engine.timer_minutes
+        existing_players = [
+            (player.seat, player.user_id, player.username)
+            for player in self.engine.players
+            if player is not None
+        ]
+
+        self.engine = GameEngine(timer_minutes=timer_minutes)
+        self.engine.set_notify(self._on_engine_notify)
+        for seat, user_id, username in sorted(existing_players):
+            new_seat = self.engine.add_player(user_id, username)
+            if new_seat != seat:
+                raise RuntimeError("重新建房后座位顺序不一致")
 
     def waiting_status(self) -> dict:
         players = []
@@ -113,11 +157,13 @@ class Room:
             "phase": self.engine.phase.value,
             "players": players,
             "all_ready": self.engine.both_joined() and 0 in self.ready_seats and 1 in self.ready_seats,
+            "owner_seat": self.user_to_seat.get(self.owner_user_id) if self.owner_user_id is not None else None,
+            "timer_minutes": self.engine.timer_minutes,
         }
 
     def _start_timer(self):
         """Start periodic timer updates."""
-        if self._timer_task is None:
+        if self._timer_task is None or self._timer_task.done():
             self._timer_task = asyncio.create_task(self._timer_loop())
 
     async def _timer_loop(self):
@@ -137,6 +183,8 @@ class Room:
                 await asyncio.sleep(5)
         except asyncio.CancelledError:
             pass
+        finally:
+            self._timer_task = None
 
     async def _send_to_seat(self, seat: int, data: dict):
         """Send a message to a player by seat index."""
@@ -171,9 +219,6 @@ class Room:
                 return
             if engine.phase == Phase.PHASE2_ACTION and engine.tenpai_declarer == seat:
                 await engine.action_phase2_discard(seat, tile_id)
-                return
-            if engine.phase == Phase.PHASE1_ACTION and seat in engine._pending_damaten:
-                await engine.action_discard_after_damaten(seat, tile_id)
                 return
             # If player declared tenpai this turn, use the tenpai discard path
             player = engine.players[seat]
@@ -298,8 +343,8 @@ class RoomManager:
         return [r.to_dict() for r in self.rooms.values() if not r.is_game_over]
 
     def cleanup_finished(self):
-        """Remove finished rooms."""
-        to_remove = [rid for rid, r in self.rooms.items() if r.is_game_over]
+        """Remove rooms that are no longer referenced by any seated players."""
+        to_remove = [rid for rid, r in self.rooms.items() if r.is_empty()]
         for rid in to_remove:
             del self.rooms[rid]
 

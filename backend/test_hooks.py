@@ -1,4 +1,5 @@
 from collections import Counter
+from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
@@ -45,9 +46,25 @@ Phase2GuessRequest.model_rebuild()
 
 class Phase1ActionStateRequest(BaseModel):
     actor_closed: list[str]
+    actor_melds: list["TestMeldRequest"] | None = None
     actor_draw: str
     opponent_closed: list[str]
+    opponent_melds: list["TestMeldRequest"] | None = None
     dora_indicator: str | None = None
+    actor_points: int | None = None
+    opponent_points: int | None = None
+
+
+Phase1ActionStateRequest.model_rebuild()
+
+
+class GameOverStateRequest(BaseModel):
+    winner: int
+    seat0_points: int
+    seat1_points: int
+    honba_count: int = 0
+    riichi_sticks: int = 0
+    round_result: dict[str, Any] | None = None
 
 
 def _normalize_tile_name(name: str) -> str:
@@ -144,6 +161,11 @@ def _allocate_melds(meld_specs: list[TestMeldRequest] | None, available_by_type:
     return melds
 
 
+def _count_kan_melds(*meld_groups: list[Meld]) -> int:
+    kan_types = {MeldType.ANKAN, MeldType.MINKAN, MeldType.KAKAN}
+    return sum(1 for meld_group in meld_groups for meld in meld_group if meld.meld_type in kan_types)
+
+
 def _build_dead_wall(
     available_by_type: dict[int, list[int]],
     dora_indicator: str | None,
@@ -185,24 +207,28 @@ def _setup_controlled_phase1_action(engine, actor_seat: int, req: Phase1ActionSt
     opponent_seat = engine.opponent_seat(actor_seat)
 
     actor_tiles = [_normalize_tile_name(tile) for tile in req.actor_closed]
+    actor_meld_tiles = [_normalize_tile_name(tile) for meld in (req.actor_melds or []) for tile in meld.tiles]
     actor_draw = _normalize_tile_name(req.actor_draw)
     opponent_tiles = [_normalize_tile_name(tile) for tile in req.opponent_closed]
+    opponent_meld_tiles = [_normalize_tile_name(tile) for meld in (req.opponent_melds or []) for tile in meld.tiles]
     dora_indicator = _normalize_tile_name(req.dora_indicator) if req.dora_indicator else None
 
-    if len(actor_tiles) != 13:
-        raise HTTPException(status_code=400, detail="actor_closed 必须正好13张")
-    if len(opponent_tiles) != 13:
-        raise HTTPException(status_code=400, detail="opponent_closed 必须正好13张")
+    if len(actor_tiles) + len(actor_meld_tiles) != 13:
+        raise HTTPException(status_code=400, detail="actor_closed 加 actor_melds 必须合计正好13张")
+    if len(opponent_tiles) + len(opponent_meld_tiles) != 13:
+        raise HTTPException(status_code=400, detail="opponent_closed 加 opponent_melds 必须合计正好13张")
 
-    combined_tile_names = actor_tiles + [actor_draw] + opponent_tiles
+    combined_tile_names = actor_tiles + actor_meld_tiles + [actor_draw] + opponent_tiles + opponent_meld_tiles
     if dora_indicator:
         combined_tile_names.append(dora_indicator)
     _validate_tile_name_counts(combined_tile_names)
 
     available_by_type = _build_available_tiles()
     actor_closed_ids = _allocate_tile_ids(actor_tiles, available_by_type)
+    actor_melds = _allocate_melds(req.actor_melds, available_by_type)
     actor_draw_id = _allocate_tile_ids([actor_draw], available_by_type)[0]
     opponent_closed_ids = _allocate_tile_ids(opponent_tiles, available_by_type)
+    opponent_melds = _allocate_melds(req.opponent_melds, available_by_type)
     dead_wall, indicator_tile_id = _build_dead_wall(available_by_type, dora_indicator)
     live_wall_tail = [tile_id for tt in sorted(available_by_type) for tile_id in available_by_type[tt]]
 
@@ -210,8 +236,14 @@ def _setup_controlled_phase1_action(engine, actor_seat: int, req: Phase1ActionSt
     opponent = engine.players[opponent_seat]
 
     actor.hand.init_deal(actor_closed_ids)
+    actor.hand.melds = actor_melds
     actor.hand.add_draw(actor_draw_id)
     opponent.hand.init_deal(opponent_closed_ids)
+    opponent.hand.melds = opponent_melds
+    if req.actor_points is not None:
+        actor.points = req.actor_points
+    if req.opponent_points is not None:
+        opponent.points = req.opponent_points
 
     actor.declared_tenpai = False
     opponent.declared_tenpai = False
@@ -237,6 +269,7 @@ def _setup_controlled_phase1_action(engine, actor_seat: int, req: Phase1ActionSt
     engine._pending_kakan = None
     engine._temp_furiten.clear()
     engine._is_rinshan_draw = False
+    engine._total_kan_count = _count_kan_melds(actor_melds, opponent_melds)
     engine.round_result = None
     engine.game_over = False
     engine._ready.clear()
@@ -312,6 +345,7 @@ def _setup_controlled_phase2(engine, guesser_seat: int, declarer_seat: int, req:
     engine._pending_kakan = None
     engine._temp_furiten.clear()
     engine._is_rinshan_draw = False
+    engine._total_kan_count = _count_kan_melds(declarer_melds, guesser_melds)
     engine.round_result = None
     engine.game_over = False
     engine._ready.clear()
@@ -393,4 +427,60 @@ async def phase1_action_state(
         "ok": True,
         "actor": seat,
         "actions": scenario["actions"],
+    }
+
+
+@router.post("/game-over-state")
+async def game_over_state(
+    req: GameOverStateRequest,
+    authorization: str | None = Header(default=None),
+):
+    user = get_http_user(authorization)
+    room = room_manager.get_player_room(user["id"])
+    if room is None:
+        raise HTTPException(status_code=404, detail="房间不存在")
+
+    seat = room.user_to_seat.get(user["id"])
+    if seat is None:
+        raise HTTPException(status_code=404, detail="座位不存在")
+
+    if req.winner not in (0, 1):
+        raise HTTPException(status_code=400, detail="winner 必须是 0 或 1")
+
+    engine = room.engine
+    engine.players[0].points = req.seat0_points
+    engine.players[1].points = req.seat1_points
+    engine.phase = Phase.GAME_OVER
+    engine.game_over = True
+    engine.current_turn = -1
+    engine.tenpai_declarer = None
+    engine.phase2_draw_count = 0
+    engine.available_calls.clear()
+    engine.last_discard = None
+    engine.last_discard_seat = None
+    engine._pending_kakan = None
+    engine._temp_furiten.clear()
+    engine._is_rinshan_draw = False
+    engine._ready.clear()
+    engine.round_result = None
+    engine.round_result_payload = dict(req.round_result) if req.round_result is not None else None
+    engine.game_over_payload = {
+        "winner": req.winner,
+        "winner_name": engine.players[req.winner].username,
+        "final_points": {
+            0: req.seat0_points,
+            1: req.seat1_points,
+        },
+        "honba_count": req.honba_count,
+        "riichi_sticks": req.riichi_sticks,
+    }
+
+    if engine.round_result_payload is not None:
+        await engine.notify("round_result", engine.round_result_payload)
+    await engine.notify("game_over", engine.game_over_payload)
+
+    return {
+        "ok": True,
+        "winner": req.winner,
+        "final_points": engine.game_over_payload["final_points"],
     }

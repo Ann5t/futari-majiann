@@ -17,6 +17,7 @@ GAME_OVER      – final results
 
 from __future__ import annotations
 import asyncio
+import random
 import time
 from enum import Enum
 from dataclasses import dataclass, field
@@ -83,6 +84,7 @@ class GameEngine:
         # Round tracking
         self.round_number: int = 0
         self.dealer_seat: int = 0  # seat 0 or 1
+        self.initial_dealer_rolls: dict[int, int] | None = None
         self.round_wind_tt: int = 27  # 東 for now (no wind rotation needed)
         self.honba_count: int = 0
         self.riichi_sticks: int = 0
@@ -90,7 +92,6 @@ class GameEngine:
         self.first_draw_done: bool = False  # for tenhou/chiihou detection
         self._round_has_interruption: bool = False
         self._called_discards_by_seat: dict[int, set[int]] = {0: set(), 1: set()}
-        self._pending_damaten: set[int] = set()
         self._ippatsu_pending: set[int] = set()
 
         # Phase 2 state
@@ -119,6 +120,8 @@ class GameEngine:
 
         # Results
         self.round_result: RoundResult | None = None
+        self.round_result_payload: dict | None = None
+        self.game_over_payload: dict | None = None
         self.game_over: bool = False
 
         # Ready tracking for next round
@@ -173,7 +176,7 @@ class GameEngine:
         return valid_discards
 
     def _tenpai_declaration_discards(self, hand: Hand) -> list[int]:
-        return self._tenpai_preserving_discards(hand, forbid_furiten=True)
+        return self._tenpai_preserving_discards(hand)
 
     def _clone_hand(self, hand: Hand) -> Hand:
         clone = Hand()
@@ -232,6 +235,9 @@ class GameEngine:
             and player.points >= 1000
         )
 
+    def _can_declare_damaten(self, player: PlayerState) -> bool:
+        return self._can_declare_tenpai(player) and not player.hand.is_open
+
     def _phase1_ankan_options(self, player: PlayerState) -> list[list[int]]:
         if player.declared_riichi:
             return self._locked_tenpai_ankan_options(player)
@@ -243,6 +249,33 @@ class GameEngine:
         if player.declared_tenpai:
             return []
         return player.hand.can_kakan()
+
+    def _phase1_actions_payload(
+        self,
+        player: PlayerState,
+        *,
+        can_tsumo: bool | None = None,
+        include_kan_options: bool = True,
+        is_rinshan: bool = False,
+    ) -> dict:
+        if can_tsumo is None:
+            can_tsumo = player.hand.draw_tile is not None and shanten_number(player.hand) == -1
+
+        ankans = self._phase1_ankan_options(player) if include_kan_options else []
+        kakans = self._phase1_kakan_options(player) if include_kan_options else []
+        actions = {
+            "must_discard": True,
+            "can_tsumo": can_tsumo,
+            "can_ankan": [[t for t in group] for group in ankans],
+            "can_kakan": [(m.to_dict(), extra) for m, extra in kakans],
+            "can_declare_tenpai": self._can_declare_tenpai(player),
+            "can_declare_riichi": self._can_declare_riichi(player),
+            "can_declare_damaten": self._can_declare_damaten(player),
+            "is_haitei": self.wall.remaining == 0,
+        }
+        if is_rinshan:
+            actions["is_rinshan"] = True
+        return actions
 
     def _response_target_seat(self) -> int | None:
         if self.last_discard_seat is None:
@@ -286,12 +319,7 @@ class GameEngine:
         return qualifiers
 
     def _phase2_guess_blocked_types(self, seat: int) -> set[int]:
-        guessed = set(self.phase2_guessed_types_by_seat.get(seat, set()))
-        if self.tenpai_declarer is None:
-            return guessed
-        declarer = self.players[self.tenpai_declarer]
-        discarded = {tile_type(tile_id) for tile_id in declarer.hand.discards}
-        return guessed | discarded
+        return set(self.phase2_guessed_types_by_seat.get(seat, set()))
 
     def _phase2_guess_selectable_types(self, seat: int) -> list[int]:
         blocked = self._phase2_guess_blocked_types(seat)
@@ -305,12 +333,12 @@ class GameEngine:
             message = '5次摸牌结束，已无可选牌，可跳过本轮猜牌。' if retry else '已经没有可选牌，可跳过本轮猜牌。'
         elif required_count == 1:
             if invalid:
-                message = '只有1张牌可选，请选择这1张未被系统禁用的牌。'
+                message = '只有1张牌可选，请选择这1张未猜过的牌。'
             else:
                 message = '5次摸牌结束，只剩1张牌可选，请按能选多少选多少。' if retry else '只剩1张牌可选，请按能选多少选多少。'
         else:
             if invalid:
-                message = '已有无效选择，请重新选择2张未猜过且未被系统禁用的牌。'
+                message = '已有无效选择，请重新选择2张未猜过的牌。'
             else:
                 message = '5次摸牌结束，未和牌。请再次选择2张牌进行猜测。' if retry else '请选择2张牌进行猜测'
 
@@ -353,13 +381,22 @@ class GameEngine:
     # Game flow
     # ------------------------------------------------------------------
 
+    def _roll_initial_dealer(self) -> dict[int, int]:
+        """Roll until one seat has a unique higher value for the opening dealer."""
+        while True:
+            rolls = {
+                0: random.randint(1, 6),
+                1: random.randint(1, 6),
+            }
+            if rolls[0] != rolls[1]:
+                return rolls
+
     async def start_game(self):
         """Called when both players are ready."""
         self.game_start_time = time.time()
         self.round_number = 0
-        self.dealer_seat = 0
-        self.players[0].is_dealer = True
-        self.players[1].is_dealer = False
+        self.initial_dealer_rolls = self._roll_initial_dealer()
+        self.dealer_seat = max(self.initial_dealer_rolls, key=self.initial_dealer_rolls.get)
         await self.start_round()
 
     async def start_round(self):
@@ -374,8 +411,9 @@ class GameEngine:
         self.last_discard_seat = None
         self.available_calls = {}
         self.round_result = None
+        self.round_result_payload = None
+        self.game_over_payload = None
         self._pending_kakan = None
-        self._pending_damaten.clear()
         self._ippatsu_pending.clear()
         self._round_has_interruption = False
         self._called_discards_by_seat = {0: set(), 1: set()}
@@ -440,19 +478,7 @@ class GameEngine:
         # Check for tsumo (agari) — furiten only blocks ron, NOT tsumo
         can_tsumo = shanten_number(player.hand) == -1
 
-        # Riichi after declaration only keeps ankans that preserve the locked waits.
-        ankans = self._phase1_ankan_options(player)
-
-        # Kakan is blocked after any tenpai declaration.
-        kakans = self._phase1_kakan_options(player)
-
         # Check if can declare tenpai (Phase 2 not yet active, hand close to tenpai)
-        can_declare_tenpai = self._can_declare_tenpai(player)
-        can_declare_riichi = self._can_declare_riichi(player)
-
-        # Is this haitei (last drawable tile)?
-        is_haitei = self.wall.remaining == 0
-
         self.phase = Phase.PHASE1_ACTION
 
         # Calculate waiting tiles for tenpai display
@@ -460,16 +486,7 @@ class GameEngine:
         if self._safe_is_tenpai(player.hand):
             my_waits = self._safe_waiting_tiles(player.hand)
 
-        actions = {
-            "must_discard": True,
-            "can_tsumo": can_tsumo,
-            "can_ankan": [[t for t in group] for group in ankans],
-            "can_kakan": [(m.to_dict(), extra) for m, extra in kakans],
-            "can_declare_tenpai": can_declare_tenpai,
-            "can_declare_riichi": can_declare_riichi,
-            "can_declare_damaten": can_declare_riichi,
-            "is_haitei": is_haitei,
-        }
+        actions = self._phase1_actions_payload(player, can_tsumo=can_tsumo)
 
         await self.notify("draw_tile", {
             "seat": self.current_turn,
@@ -693,10 +710,6 @@ class GameEngine:
 
         # Check for tsumo on rinshan — furiten does NOT block tsumo
         can_tsumo = shanten_number(player.hand) == -1
-        ankans = self._phase1_ankan_options(player)
-        kakans = self._phase1_kakan_options(player)
-        can_declare_tenpai = self._can_declare_tenpai(player)
-        can_declare_riichi = self._can_declare_riichi(player)
 
         self.phase = Phase.PHASE1_ACTION
 
@@ -717,15 +730,7 @@ class GameEngine:
             "seat": seat,
             "tile": rinshan,
             "wall_remaining": self.wall.remaining,
-            "actions": {
-                "must_discard": True,
-                "can_tsumo": can_tsumo,
-                "can_ankan": [[t for t in group] for group in ankans],
-                "can_kakan": [(m.to_dict(), extra) for m, extra in kakans],
-                "can_declare_tenpai": can_declare_tenpai,
-                "can_declare_riichi": can_declare_riichi,
-                "is_rinshan": True,
-            },
+            "actions": self._phase1_actions_payload(player, can_tsumo=can_tsumo, is_rinshan=True),
         }, target_seat=seat)
 
     async def action_kakan(self, seat: int, tile_id: int):
@@ -781,6 +786,14 @@ class GameEngine:
             p0_kans = sum(1 for m in self.players[0].hand.melds if m.meld_type.value in ('ankan', 'minkan', 'kakan'))
             p1_kans = sum(1 for m in self.players[1].hand.melds if m.meld_type.value in ('ankan', 'minkan', 'kakan'))
             if p0_kans > 0 and p1_kans > 0:
+                await self.notify("kan_declared", {
+                    "seat": seat,
+                    "type": "kakan",
+                    "tiles": target_meld.tiles,
+                    "called_tile": target_meld.called_tile,
+                    "added_tile": tile_id,
+                    "dora_indicators": self.wall.dora_indicators,
+                })
                 await self._end_round_draw(reason="four_kan_abort")
                 return
 
@@ -797,6 +810,8 @@ class GameEngine:
                 "seat": seat,
                 "type": "kakan",
                 "tiles": target_meld.tiles,
+                "called_tile": target_meld.called_tile,
+                "added_tile": tile_id,
                 "dora_indicators": self.wall.dora_indicators,
             })
 
@@ -844,6 +859,8 @@ class GameEngine:
             "seat": seat,
             "type": "kakan",
             "tiles": target_meld.tiles,
+            "called_tile": target_meld.called_tile,
+            "added_tile": tile_id,
             "dora_indicators": self.wall.dora_indicators,
         })
 
@@ -877,7 +894,7 @@ class GameEngine:
         player = self.players[seat]
 
         # Player must be in tenpai form (shanten == 0 with 14 tiles)
-        # and have at least one non-furiten declaration discard.
+        # and have at least one discard that keeps the hand in tenpai.
         if shanten_number(player.hand) != 0:
             return
 
@@ -920,22 +937,8 @@ class GameEngine:
         # The discard won't trigger normal chi/pon response; instead we go to Phase 2.
 
     async def action_declare_damaten(self, seat: int):
-        """Player chooses hidden tenpai (damaten) and must discard a tenpai-preserving tile."""
-        if self.phase != Phase.PHASE1_ACTION or self.current_turn != seat:
-            return
-
-        player = self.players[seat]
-        if not self._can_declare_riichi(player):
-            return
-
-        self._pending_damaten.add(seat)
-        player.tenpai_waits = self._safe_waiting_tiles(player.hand)
-
-        await self.notify("must_discard", {
-            "seat": seat,
-            "tenpai_discards": self._tenpai_declaration_discards(player.hand),
-            "tenpai_mode": "damaten",
-        }, target_seat=seat)
+        """Player declares silent tenpai: public tenpai declaration without riichi sticks."""
+        await self.action_declare_tenpai(seat, riichi=False)
 
     async def action_discard_after_tenpai(self, seat: int, tile_id: int):
         """After declaring tenpai, player discards and we move to Phase 2."""
@@ -983,73 +986,6 @@ class GameEngine:
         # Enter Phase 2
         await self._enter_phase2()
 
-    async def action_discard_after_damaten(self, seat: int, tile_id: int):
-        """After choosing damaten, discard while keeping tenpai and remain hidden."""
-        if self.phase != Phase.PHASE1_ACTION or self.current_turn != seat or seat not in self._pending_damaten:
-            return
-
-        player = self.players[seat]
-        if tile_id not in player.hand.closed:
-            return
-        if tile_id not in self._tenpai_declaration_discards(player.hand):
-            return
-
-        self._pending_damaten.discard(seat)
-        player.hand.discard(tile_id)
-        self.last_discard = tile_id
-        self.last_discard_seat = seat
-        self.first_draw_done = True
-
-        waits = self._safe_waiting_tiles(player.hand)
-        player.tenpai_waits = waits
-        if waits:
-            player.is_furiten = is_furiten(player.hand, waits)
-
-        opp_seat = self.opponent_seat(seat)
-        opponent = self.players[opp_seat]
-
-        calls = {}
-        opp_waits = self._safe_waiting_tiles(opponent.hand) if self._safe_is_tenpai(opponent.hand) else []
-        if opp_waits and tile_type(tile_id) in opp_waits and not opponent.is_furiten and opp_seat not in self._temp_furiten:
-            calls["can_ron"] = True
-
-        chi_options = opponent.hand.can_chi(tile_id)
-        if chi_options:
-            calls["can_chi"] = chi_options
-
-        pon_tiles = opponent.hand.can_pon(tile_id)
-        if pon_tiles:
-            calls["can_pon"] = pon_tiles
-
-        kan_tiles = opponent.hand.can_minkan(tile_id)
-        if kan_tiles:
-            calls["can_minkan"] = kan_tiles
-
-        self.available_calls = calls
-
-        await self.notify("discard", {
-            "seat": seat,
-            "tile": tile_id,
-            "wall_remaining": self.wall.remaining,
-        })
-
-        if calls:
-            self.phase = Phase.PHASE1_RESPONSE
-            await self.notify("call_available", {
-                "calls": calls,
-                "discard_tile": tile_id,
-                "discard_seat": seat,
-                "is_houtei": self.wall.remaining == 0,
-            }, target_seat=opp_seat)
-            return
-
-        if self.wall.remaining == 0:
-            await self._end_round_draw()
-            return
-
-        self.current_turn = opp_seat
-        await self._do_draw()
-
     # ------------------------------------------------------------------
     # Phase 1 responses (from opponent after a discard)
     # ------------------------------------------------------------------
@@ -1079,6 +1015,14 @@ class GameEngine:
                 p0_kans = sum(1 for m in self.players[0].hand.melds if m.meld_type.value in ('ankan', 'minkan', 'kakan'))
                 p1_kans = sum(1 for m in self.players[1].hand.melds if m.meld_type.value in ('ankan', 'minkan', 'kakan'))
                 if p0_kans > 0 and p1_kans > 0:
+                    await self.notify("kan_declared", {
+                        "seat": kakan_seat,
+                        "type": "kakan",
+                        "tiles": kakan_meld.tiles,
+                        "called_tile": kakan_meld.called_tile,
+                        "added_tile": kakan_tile,
+                        "dora_indicators": self.wall.dora_indicators,
+                    })
                     await self._end_round_draw(reason="four_kan_abort")
                     return
             rinshan = self.wall.draw_rinshan()
@@ -1087,6 +1031,8 @@ class GameEngine:
                 "seat": kakan_seat,
                 "type": "kakan",
                 "tiles": kakan_meld.tiles,
+                "called_tile": kakan_meld.called_tile,
+                "added_tile": kakan_tile,
                 "dora_indicators": self.wall.dora_indicators,
             })
 
@@ -1103,8 +1049,6 @@ class GameEngine:
             player_k.hand.add_draw(rinshan)
             self._is_rinshan_draw = True
             can_tsumo = shanten_number(player_k.hand) == -1
-            ankans_k = player_k.hand.can_ankan()
-            kakans_k = player_k.hand.can_kakan()
 
             self.current_turn = kakan_seat
             self.phase = Phase.PHASE1_ACTION
@@ -1113,21 +1057,14 @@ class GameEngine:
                 "seat": kakan_seat,
                 "tile": rinshan,
                 "wall_remaining": self.wall.remaining,
-                "actions": {
-                    "must_discard": True,
-                    "can_tsumo": can_tsumo,
-                    "can_ankan": [[t for t in group] for group in ankans_k],
-                    "can_kakan": [(m.to_dict(), extra) for m, extra in kakans_k],
-                    "can_declare_tenpai": False,
-                    "is_rinshan": True,
-                },
+                "actions": self._phase1_actions_payload(player_k, can_tsumo=can_tsumo, is_rinshan=True),
             }, target_seat=kakan_seat)
             return
 
         self.available_calls = {}
 
         # If tenpai was declared, enter Phase 2 instead of continuing
-        if self.tenpai_declarer is not None and self.tenpai_declarer == opp_seat:
+        if self.tenpai_declarer is not None and self.tenpai_declarer == self.last_discard_seat:
             await self._enter_phase2()
             return
 
@@ -1214,6 +1151,7 @@ class GameEngine:
 
         await self.notify("must_discard", {
             "seat": seat,
+            **self._phase1_actions_payload(player, can_tsumo=False, include_kan_options=False),
         }, target_seat=seat)
 
     async def response_pon(self, seat: int):
@@ -1248,6 +1186,7 @@ class GameEngine:
 
         await self.notify("must_discard", {
             "seat": seat,
+            **self._phase1_actions_payload(player, can_tsumo=False, include_kan_options=False),
         }, target_seat=seat)
 
     async def response_minkan(self, seat: int):
@@ -1280,6 +1219,7 @@ class GameEngine:
                     "seat": seat,
                     "type": "minkan",
                     "tiles": own_tiles + [discard_tile],
+                    "called_tile": discard_tile,
                     "dora_indicators": self.wall.dora_indicators,
                 })
                 await self._end_round_draw(reason="four_kan_abort")
@@ -1291,6 +1231,7 @@ class GameEngine:
             "seat": seat,
             "type": "minkan",
             "tiles": own_tiles + [discard_tile],
+            "called_tile": discard_tile,
             "dora_indicators": self.wall.dora_indicators,
         })
 
@@ -1301,8 +1242,6 @@ class GameEngine:
         player.hand.add_draw(rinshan)
         self._is_rinshan_draw = True
         can_tsumo = shanten_number(player.hand) == -1
-        ankans = player.hand.can_ankan()
-        kakans = player.hand.can_kakan()
 
         self.current_turn = seat
         self.phase = Phase.PHASE1_ACTION
@@ -1317,14 +1256,7 @@ class GameEngine:
             "seat": seat,
             "tile": rinshan,
             "wall_remaining": self.wall.remaining,
-            "actions": {
-                "must_discard": True,
-                "can_tsumo": can_tsumo,
-                "can_ankan": [[t for t in group] for group in ankans],
-                "can_kakan": [(m.to_dict(), extra) for m, extra in kakans],
-                "can_declare_tenpai": False,
-                "is_rinshan": True,
-            },
+            "actions": self._phase1_actions_payload(player, can_tsumo=can_tsumo, is_rinshan=True),
         }, target_seat=seat)
 
     # ------------------------------------------------------------------
@@ -1542,7 +1474,6 @@ class GameEngine:
         total_transfer = base_transfer + honba_bonus
 
         winner.points += total_transfer + riichi_bonus
-        loser.points -= total_transfer
 
         self.round_result = RoundResult(
             result_type="tsumo" if is_tsumo else "ron",
@@ -1551,7 +1482,7 @@ class GameEngine:
             score=score,
             points_delta={
                 winner_seat: total_transfer + riichi_bonus,
-                loser_seat: -total_transfer,
+                loser_seat: 0,
             },
             details={
                 "base_transfer": base_transfer,
@@ -1560,7 +1491,7 @@ class GameEngine:
             },
         )
 
-        await self.notify("round_result", {
+        self.round_result_payload = {
             "type": self.round_result.result_type,
             "winner": winner_seat,
             "winner_name": winner.username,
@@ -1577,7 +1508,8 @@ class GameEngine:
             "honba_bonus": honba_bonus,
             "riichi_bonus": riichi_bonus,
             "points": {p.seat: p.points for p in self.players},
-        })
+        }
+        await self.notify("round_result", self.round_result_payload)
 
         if winner.is_dealer:
             self.honba_count += 1
@@ -1641,16 +1573,13 @@ class GameEngine:
                     nagashi_riichi_bonus = self.riichi_sticks * 1000
                     nagashi_points_transfer = base_transfer + nagashi_honba_bonus
                     delta[nagashi_winner_seat] += nagashi_points_transfer + nagashi_riichi_bonus
-                    delta[loser_seat] -= nagashi_points_transfer
                 else:
                     # 2-player simultaneous nagashi mangan is rare and non-standard.
-                    # Keep settlement symmetric and leave honba/riichi sticks unresolved.
+                    # Under additive scoring, award each qualifier without deductions.
                     for winner_seat in nagashi_winners:
                         winner = self.players[winner_seat]
                         transfer = points_transfer_2p(nagashi_scores[winner_seat], True, winner.is_dealer)
-                        loser_seat = self.opponent_seat(winner_seat)
                         delta[winner_seat] += transfer
-                        delta[loser_seat] -= transfer
                 reason = "nagashi_mangan"
 
         if reason == "phase2_guess_hit":
@@ -1661,6 +1590,10 @@ class GameEngine:
             revealed_seat = declarer_seat
             revealed_name = self.players[declarer_seat].username
             revealed_hand = self._serialize_result_hand(self.players[declarer_seat].hand)
+        elif reason == "four_kan_abort":
+            # Four-kan abort is an interrupted draw; do not apply exhaustive-draw tenpai payments.
+            p0_tenpai = self._safe_is_tenpai(p0.hand)
+            p1_tenpai = self._safe_is_tenpai(p1.hand)
         elif reason == "nagashi_mangan":
             p0_tenpai = self._safe_is_tenpai(p0.hand)
             p1_tenpai = self._safe_is_tenpai(p1.hand)
@@ -1670,10 +1603,8 @@ class GameEngine:
             p1_tenpai = self._safe_is_tenpai(p1.hand)
             if p0_tenpai and not p1_tenpai:
                 delta[0] = 3000
-                delta[1] = -3000
             elif p1_tenpai and not p0_tenpai:
                 delta[1] = 3000
-                delta[0] = -3000
             # Both tenpai or both noten → no transfer
 
         p0.points += delta[0]
@@ -1701,7 +1632,7 @@ class GameEngine:
             },
         )
 
-        await self.notify("round_result", {
+        self.round_result_payload = {
             "type": "draw",
             "reason": reason,
             "tenpai": {0: p0_tenpai, 1: p1_tenpai},
@@ -1722,7 +1653,8 @@ class GameEngine:
             "points_transfer": nagashi_points_transfer,
             "honba_bonus": nagashi_honba_bonus,
             "riichi_bonus": nagashi_riichi_bonus,
-        })
+        }
+        await self.notify("round_result", self.round_result_payload)
 
         if reason == "nagashi_mangan" and nagashi_winner_seat is not None:
             if self.players[nagashi_winner_seat].is_dealer:
@@ -1747,7 +1679,7 @@ class GameEngine:
         # Game over conditions:
         # 1. Current round is already marked as the last round
         # 2. Match timer has reached the limit by the end of this round
-        # 3. A player has <= 0 points
+        # 3. A player has < 0 points
         game_over = False
         timer_expired = False
         if self.game_start_time:
@@ -1757,7 +1689,7 @@ class GameEngine:
         if self.is_last_round or timer_expired:
             game_over = True
         for p in self.players:
-            if p.points <= 0:
+            if p.points < 0:
                 game_over = True
 
         if game_over:
@@ -1769,13 +1701,14 @@ class GameEngine:
             if self.riichi_sticks > 0:
                 self.players[winner_seat].points += self.riichi_sticks * 1000
                 self.riichi_sticks = 0
-            await self.notify("game_over", {
+            self.game_over_payload = {
                 "winner": winner_seat,
                 "winner_name": self.players[winner_seat].username,
                 "final_points": {p.seat: p.points for p in self.players},
                 "honba_count": self.honba_count,
                 "riichi_sticks": self.riichi_sticks,
-            })
+            }
+            await self.notify("game_over", self.game_over_payload)
         else:
             # Wait for both players to confirm ready
             self._ready.clear()
@@ -1806,14 +1739,7 @@ class GameEngine:
 
         if self.phase == Phase.PHASE1_ACTION and seat == self.current_turn:
             if player.hand.draw_tile is None:
-                return {"must_discard": True}
-
-            if seat in self._pending_damaten:
-                return {
-                    "must_discard": True,
-                    "tenpai_discards": self._tenpai_declaration_discards(player.hand),
-                    "tenpai_mode": "damaten",
-                }
+                return self._phase1_actions_payload(player, can_tsumo=False, include_kan_options=False)
 
             if player.declared_tenpai and self.tenpai_declarer == seat:
                 return {
@@ -1823,20 +1749,7 @@ class GameEngine:
                 }
 
             can_tsumo = shanten_number(player.hand) == -1
-            ankans = self._phase1_ankan_options(player)
-            kakans = self._phase1_kakan_options(player)
-            can_declare_tenpai = self._can_declare_tenpai(player)
-            can_declare_riichi = self._can_declare_riichi(player)
-            actions = {
-                "must_discard": True,
-                "can_tsumo": can_tsumo,
-                "can_ankan": [[t for t in group] for group in ankans],
-                "can_kakan": [(m.to_dict(), extra) for m, extra in kakans],
-                "can_declare_tenpai": can_declare_tenpai,
-                "can_declare_riichi": can_declare_riichi,
-                "can_declare_damaten": can_declare_riichi,
-                "is_haitei": self.wall.remaining == 0,
-            }
+            actions = self._phase1_actions_payload(player, can_tsumo=can_tsumo)
             if self._is_rinshan_draw:
                 actions["is_rinshan"] = True
             return actions
@@ -1878,11 +1791,11 @@ class GameEngine:
                 "current_turn": self.current_turn,
                 "my_seat": seat,
                 "my_hand": player.hand.to_dict(hide_tiles=False) if player else {"closed": [], "closed_count": 0, "melds": [], "discards": [], "draw_tile": None},
-                "my_points": player.points if player else 25000,
+                "my_points": player.points if player else STARTING_POINTS,
                 "my_declared_tenpai": False,
                 "my_declared_riichi": False,
                 "opponent_hand": {"closed": [], "closed_count": 0, "melds": [], "discards": [], "draw_tile": None},
-                "opponent_points": 25000,
+                "opponent_points": STARTING_POINTS,
                 "opponent_name": "等待中...",
                 "opponent_declared_tenpai": False,
                 "opponent_declared_riichi": False,
@@ -1894,7 +1807,10 @@ class GameEngine:
                 "riichi_sticks": self.riichi_sticks,
                 "actions": self._serialized_actions_for_player(seat),
                 "round_ready_seats": sorted(self._ready),
+                "round_result": dict(self.round_result_payload) if self.round_result_payload else None,
+                "game_over_data": dict(self.game_over_payload) if self.game_over_payload else None,
                 "phase2_guessed_types": sorted(self.phase2_guessed_types_by_seat.get(seat, set())),
+                "initial_dealer_rolls": dict(self.initial_dealer_rolls) if self.initial_dealer_rolls is not None else None,
             }
 
         elapsed = 0
@@ -1927,8 +1843,11 @@ class GameEngine:
             "riichi_sticks": self.riichi_sticks,
             "actions": self._serialized_actions_for_player(seat),
             "round_ready_seats": sorted(self._ready),
+            "round_result": dict(self.round_result_payload) if self.round_result_payload else None,
+            "game_over_data": dict(self.game_over_payload) if self.game_over_payload else None,
             "phase2_draw_count": self.phase2_draw_count,
             "phase2_guessed_types": sorted(self.phase2_guessed_types_by_seat.get(seat, set())),
+            "initial_dealer_rolls": dict(self.initial_dealer_rolls) if self.initial_dealer_rolls is not None else None,
         }
 
     def _round_start_data(self) -> dict:
@@ -1941,6 +1860,7 @@ class GameEngine:
             "is_last_round": self.is_last_round,
             "honba_count": self.honba_count,
             "riichi_sticks": self.riichi_sticks,
+            "initial_dealer_rolls": dict(self.initial_dealer_rolls) if self.round_number == 1 and self.initial_dealer_rolls is not None else None,
         }
 
     def get_timer_remaining(self) -> int:

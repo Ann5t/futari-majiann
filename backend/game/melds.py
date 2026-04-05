@@ -29,12 +29,21 @@ class Meld:
     def tile_types(self) -> list[int]:
         return [tile_type(t) for t in self.tiles]
 
+    @property
+    def added_tile(self) -> int | None:
+        if self.meld_type == MeldType.KAKAN and len(self.tiles) == 4:
+            return self.tiles[-1]
+        return None
+
     def to_dict(self) -> dict:
-        return {
+        data = {
             "type": self.meld_type.value,
             "tiles": self.tiles,
             "called_tile": self.called_tile,
         }
+        if self.added_tile is not None:
+            data["added_tile"] = self.added_tile
+        return data
 
     @staticmethod
     def from_dict(d: dict) -> "Meld":

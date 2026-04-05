@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>二人麻雀 - 对局</title>
-  <link rel="stylesheet" href="/static/css/style.css?v=20260403v">
+  <link rel="stylesheet" href="/static/css/style.css?v=20260404v2">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">
   <script src="/static/js/tiles-render.js?v=20260403v"></script>
   <script src="/static/js/audio-manager.js?v=20260403v"></script>
@@ -13,13 +13,12 @@
 
 <div class="game-container" id="app">
 
-  <button class="btn-secondary" id="btnLeaveWaitingRoom" onclick="leaveWaitingRoom()" style="display:none;position:absolute;top:10px;right:10px;z-index:20;">退出房间</button>
-
   <!-- Opponent area (top) -->
   <div class="opponent-area">
     <div class="opponent-info">
       <span class="name" id="oppName">对手</span>
-      <span class="points" id="oppPoints">25000</span>
+      <span class="room-status-badge" id="oppRoomStatus" style="display:none"></span>
+      <span class="points" id="oppPoints">0</span>
       <span class="tenpai-badge" id="oppTenpai" style="display:none">听牌</span>
       <span class="dealer-badge" id="oppDealer" style="display:none">庄</span>
     </div>
@@ -41,15 +40,46 @@
       </div>
     </div>
 
-    <div class="table-console">
-      <div class="game-info-bar">
-        <span class="round" id="roundInfo">第1局</span>
-          <span class="bonus-pill" id="honbaInfo">本场: 0</span>
-          <span class="bonus-pill" id="riichiStickInfo">立直棒: 0</span>
-        <span class="wall-count" id="wallCount">余牌: 122</span>
-        <span class="timer" id="timer">30:00</span>
-      </div>
+    <div class="table-side-panel table-side-panel-left">
+      <div class="table-console">
+        <div class="game-info-bar">
+          <span class="round" id="roundInfo">第1局</span>
+            <span class="bonus-pill" id="honbaInfo">本场: 0</span>
+            <span class="bonus-pill" id="riichiStickInfo">立直棒: 0</span>
+          <span class="wall-count" id="wallCount">余牌: 122</span>
+          <span class="timer" id="timer">30:00</span>
+        </div>
 
+        <!-- Wind & Dora -->
+        <div class="info-row">
+          <div class="wind-info" id="windInfo">
+            <div class="round-wind">東場</div>
+            <div class="seat-wind" id="seatWindChar">東</div>
+            <div class="seat-wind-label" id="seatWindLabel">东家</div>
+          </div>
+          <div class="dora-frame">
+            <div class="dora-frame-title">宝牌指示牌</div>
+            <div id="doraIndicators" style="display:flex;gap:3px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-center-stack">
+      <!-- Discard ponds -->
+      <div class="discard-area">
+        <div>
+          <div class="pond-label">对手牌河</div>
+          <div class="discard-pond opponent" id="oppDiscard"></div>
+        </div>
+        <div>
+          <div class="pond-label">我的牌河</div>
+          <div class="discard-pond" id="myDiscard"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-side-panel table-side-panel-right">
       <div class="audio-controls audio-controls-game" id="audioControls">
         <button class="btn-secondary audio-toggle" id="audioMuteToggle" type="button">声音开</button>
         <label class="audio-slider">SE
@@ -61,47 +91,35 @@
         <span class="audio-status" id="audioStatus">待启用</span>
       </div>
 
-      <!-- Wind & Dora -->
-      <div class="info-row">
-        <div class="wind-info" id="windInfo">
-          <div class="round-wind">東場</div>
-          <div class="seat-wind" id="seatWindChar">東</div>
-          <div class="seat-wind-label" id="seatWindLabel">东家</div>
+      <!-- Phase 2 status -->
+      <div class="phase2-status" id="phase2Status" style="display:none;">
+        <span class="phase2-badge">Phase 2</span>
+        <span id="phase2Info">猜牌阶段</span>
+      </div>
+
+      <!-- Phase 2 draw display -->
+      <div class="phase2-draws" id="phase2Draws" style="display:none;"></div>
+
+      <!-- Waiting indicator -->
+      <div class="waiting-indicator" id="waitingIndicator" style="display:none;">
+        <div class="waiting-dots"><span></span><span></span><span></span></div>
+        <span class="waiting-text">对手思考中...</span>
+      </div>
+
+      <div class="room-ready-bar" id="roundReadyBar" style="display:none;">
+        <div class="room-ready-text" id="roundReadyText">本局已结束</div>
+        <div class="room-ready-actions">
+          <button class="btn-primary" id="btnRoundReady" onclick="confirmNextRound()">继续下一局</button>
         </div>
-        <div class="dora-frame">
-          <div class="dora-frame-title">宝牌指示牌</div>
-          <div id="doraIndicators" style="display:flex;gap:3px;"></div>
-        </div>
       </div>
     </div>
-
-    <!-- Discard ponds -->
-    <div class="discard-area">
-      <div>
-        <div class="pond-label">对手牌河</div>
-        <div class="discard-pond opponent" id="oppDiscard"></div>
-      </div>
-      <div>
-        <div class="pond-label">我的牌河</div>
-        <div class="discard-pond" id="myDiscard"></div>
-      </div>
-    </div>
-
-    <!-- Phase 2 status -->
-    <div class="phase2-status" id="phase2Status" style="display:none;">
-      <span class="phase2-badge">Phase 2</span>
-      <span id="phase2Info">猜牌阶段</span>
-    </div>
-
-    <!-- Phase 2 draw display -->
-    <div class="phase2-draws" id="phase2Draws" style="display:none;"></div>
 
     <div class="guess-panel guess-panel-docked" id="guessPanel" style="display:none;">
       <div class="guess-box">
         <div class="guess-header">
           <div class="guess-header-copy">
             <h2 id="guessTitle">请选择2张牌进行猜测</h2>
-            <div class="guess-subtitle" id="guessSubtitle">系统会禁用已猜过和宣听者已打出的牌。</div>
+            <div class="guess-subtitle" id="guessSubtitle">系统只会锁定已猜过的牌；宣听者已打出的牌仍可选择，你也可以手动标记排除。</div>
           </div>
           <button class="btn-secondary guess-toggle" id="guessToggle" type="button" onclick="toggleGuessPanelMinimized()">最小化</button>
         </div>
@@ -114,9 +132,9 @@
             <button class="btn-secondary guess-clear-btn" id="guessClearMarks" type="button" onclick="clearMarkedGuessTiles()">清除排除</button>
           </div>
           <div class="guess-legend">
-            <span class="guess-legend-chip guessed">已猜过</span>
-            <span class="guess-legend-chip discarded">宣听者已打出</span>
-            <span class="guess-legend-chip marked">我的排除</span>
+            <span class="guess-legend-chip guessed">已猜过（系统锁定）</span>
+            <span class="guess-legend-chip discarded">宣听者已打出（可选）</span>
+            <span class="guess-legend-chip marked">我的排除（可取消）</span>
           </div>
           <div class="guess-count" id="guessCount">已选: 0 / 2</div>
           <div class="guess-tiles" id="guessTiles"></div>
@@ -127,19 +145,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Waiting indicator -->
-    <div class="waiting-indicator" id="waitingIndicator" style="display:none;">
-      <div class="waiting-dots"><span></span><span></span><span></span></div>
-      <span class="waiting-text">对手思考中...</span>
-    </div>
-
-    <div class="room-ready-bar" id="roundReadyBar" style="display:none;">
-      <div class="room-ready-text" id="roundReadyText">本局已结束</div>
-      <div class="room-ready-actions">
-        <button class="btn-primary" id="btnRoundReady" onclick="confirmNextRound()">继续下一局</button>
-      </div>
-    </div>
   </div>
 
   <!-- Player area (bottom) -->
@@ -148,9 +153,10 @@
       <div class="player-info">
         <div>
           <span class="name" id="myName">我</span>
+          <span class="room-status-badge" id="myRoomStatus" style="display:none"></span>
           <span class="dealer-badge" id="myDealer" style="display:none">庄</span>
         </div>
-        <span class="points" id="myPoints">25000</span>
+        <span class="points" id="myPoints">0</span>
       </div>
       <div class="my-waits" id="myWaits" style="display:none;"></div>
     </div>
@@ -201,6 +207,24 @@
     <div class="yaku-list" id="resultYaku"></div>
     <div class="score-total" id="resultScore"></div>
     <div class="points-update" id="resultPoints"></div>
+    <div class="match-over-panel" id="matchOverPanel" style="display:none;">
+      <div class="match-over-title" id="matchOverTitle"></div>
+      <div class="match-over-subtitle" id="matchOverSubtitle"></div>
+      <div class="match-over-points" id="matchOverPoints"></div>
+      <div class="match-over-config-row">
+        <label class="match-over-field" id="matchOverTimerField">
+          <span>下一场时长</span>
+          <input type="number" id="rematchTimerMinutes" min="5" max="180" step="5">
+        </label>
+        <button class="btn-secondary" id="btnApplyRematchTimer" onclick="applyRematchTimer()">应用</button>
+      </div>
+      <div class="match-over-status" id="matchOverStatus"></div>
+      <div class="match-over-actions">
+        <button class="btn-primary" id="btnRematchReady" onclick="setRoomReady(true)">准备下一场</button>
+        <button class="btn-secondary" id="btnRematchUnready" onclick="setRoomReady(false)" style="display:none;">取消准备</button>
+        <button class="btn-secondary" id="btnReturnLobbyFromGameOver" onclick="returnToLobbyFromGameOver()">返回大厅</button>
+      </div>
+    </div>
     <button class="btn-primary" id="resultContinue" onclick="confirmNextRound()">继续</button>
   </div>
 </div>
@@ -228,11 +252,11 @@ let state = {
   myDrawTile: null,
   myMelds: [],
   myDiscards: [],
-  myPoints: 25000,
+  myPoints: 0,
   oppClosedCount: 0,
   oppMelds: [],
   oppDiscards: [],
-  oppPoints: 25000,
+  oppPoints: 0,
   oppName: '对手',
   dealerSeat: 0,
   roundNumber: 1,
@@ -254,6 +278,9 @@ let state = {
   roomPlayers: [],
   roomReadyBySeat: {},
   roundReadySeats: [],
+  roomOwnerSeat: null,
+  roomTimerMinutes: 30,
+  gameOverData: null,
 };
 
 let actions = {};      // current available actions
@@ -266,17 +293,23 @@ let phase2GuessMessage = '请选择2张牌进行猜测';
 let phase2DrawTimer = null;  // timer ID for Phase 2 draw pacing
 let phase2ResumeKey = null;
 let timerTick = null;
+let leaveLobbyPendingTimer = null;
 let chiOptionsData = [];
 let kanOptionsData = { ankan: [], kakan: [] };
 let resultRevealTimers = [];
 const sound = window.createFutariAudioManager({ defaultSeVolume: 0.60, defaultBgmVolume: 0.18 });
 const roomAudioState = { playerCount: 0, myReady: null, oppReady: null };
+let isLeavingLobbyFromGameOver = false;
 
 sound.bindControls();
 
 function syncSceneAudio() {
   if (state.phase === 'waiting' && state.roundNumber === 0) {
     sound.playBgm('ready', { gain: 1, fadeMs: 220 });
+    return;
+  }
+  if (state.phase === 'game_over') {
+    sound.stopBgm({ fadeMs: 220 });
     return;
   }
   if (state.phase === 'phase2_guess' || state.phase === 'phase2_draw' || state.phase === 'phase2_action') {
@@ -287,6 +320,32 @@ function syncSceneAudio() {
     return;
   }
   sound.playBgm('match', { gain: 1, fadeMs: 260 });
+}
+
+function isInWaitingRoom() {
+  return state.phase === 'waiting' && state.roundNumber === 0;
+}
+
+function clearLeaveLobbyPendingTimer() {
+  if (leaveLobbyPendingTimer) {
+    clearTimeout(leaveLobbyPendingTimer);
+    leaveLobbyPendingTimer = null;
+  }
+}
+
+function renderReturnLobbyButton() {
+  const btn = document.getElementById('btnReturnLobbyFromGameOver');
+  if (!btn) return;
+  btn.disabled = isLeavingLobbyFromGameOver;
+  btn.textContent = isLeavingLobbyFromGameOver ? '正在退出...' : '返回大厅';
+}
+
+function setLeavingLobbyFromGameOver(pending) {
+  isLeavingLobbyFromGameOver = pending;
+  if (!pending) {
+    clearLeaveLobbyPendingTimer();
+  }
+  renderReturnLobbyButton();
 }
 
 // ====================== WebSocket ======================
@@ -325,11 +384,26 @@ function requestStateSync() {
   send({ type: 'get_state' });
 }
 
+function resolveWallRemainingFromFullState(msg) {
+  const incoming = msg?.wall?.remaining;
+  if (typeof incoming !== 'number') {
+    return state.wallRemaining;
+  }
+
+  const sameRound = Number.isInteger(msg.round_number) && msg.round_number === state.roundNumber;
+  const roundInProgress = !['waiting', 'round_start', 'round_end', 'game_over'].includes(state.phase);
+  if (sameRound && roundInProgress && typeof state.wallRemaining === 'number' && state.wallRemaining > 0) {
+    return Math.min(state.wallRemaining, incoming);
+  }
+
+  return incoming;
+}
+
 function ensureTimerTick() {
   if (timerTick) return;
   timerTick = setInterval(() => {
     // Before round start, timer should not tick down locally.
-    if (state.phase === 'waiting') return;
+    if (state.phase === 'waiting' || state.phase === 'game_over') return;
     if (state.timerRemaining > 0) {
       state.timerRemaining -= 1;
       renderTimer();
@@ -401,7 +475,7 @@ function handleMessage(msg) {
       onPhase2DrawCycleStart(msg);
       break;
     case 'chankan_available':
-      onCallAvailable({ calls: { can_ron: true }, discard_tile: msg.tile, discard_seat: msg.seat });
+      onCallAvailable({ calls: { can_ron: true }, discard_tile: msg.tile, discard_seat: msg.seat, is_chankan: true });
       break;
     case 'round_result':
       onRoundResult(msg);
@@ -421,6 +495,7 @@ function handleMessage(msg) {
       onRoomStatus(msg);
       break;
     case 'room_left':
+      setLeavingLobbyFromGameOver(false);
       window.location.href = '/lobby';
       break;
     case 'timer_update':
@@ -429,6 +504,7 @@ function handleMessage(msg) {
       renderTimer();
       break;
     case 'error':
+      setLeavingLobbyFromGameOver(false);
       showToast(msg.message);
       break;
   }
@@ -456,7 +532,7 @@ function applyFullState(msg) {
   state.myWaitingTiles = msg.my_waiting_tiles || [];
   state.dealerSeat = msg.dealer_seat;
   state.roundNumber = msg.round_number;
-  state.wallRemaining = msg.wall.remaining;
+  state.wallRemaining = resolveWallRemainingFromFullState(msg);
   state.doraIndicators = msg.wall.dora_indicators || [];
   state.timerRemaining = msg.timer_remaining;
   state.isLastRound = msg.is_last_round;
@@ -466,7 +542,14 @@ function applyFullState(msg) {
   state.riichiSticks = msg.riichi_sticks || 0;
   state.phase2DrawCount = msg.phase2_draw_count || 0;
   state.roundReadySeats = msg.round_ready_seats || [];
+  state.gameOverData = msg.phase === 'game_over' ? (msg.game_over_data || null) : null;
   state.phase2GuessedTypes = msg.phase2_guessed_types || [];
+  if (typeof msg.timer_minutes === 'number') {
+    state.roomTimerMinutes = msg.timer_minutes;
+  }
+  if (typeof msg.owner_seat === 'number') {
+    state.roomOwnerSeat = msg.owner_seat;
+  }
   if (msg.phase === 'phase2_guess' || msg.phase === 'phase2_draw' || msg.phase === 'phase2_action') {
     syncPhase2UiFromState();
   } else {
@@ -476,6 +559,36 @@ function applyFullState(msg) {
     actions = {};
     selectedTile = null;
     hideActions();
+  }
+  if (msg.phase === 'round_end' && msg.round_result && !state.roundReadySeats.includes(state.mySeat)) {
+    renderRoundResult(msg.round_result, {
+      playSound: false,
+      animateReveal: false,
+      preserveRoundReadySeats: true,
+      roundReadySeats: msg.round_ready_seats || [],
+    });
+    restoreActionsFromState();
+    syncSceneAudio();
+    return;
+  }
+  if (msg.phase === 'game_over' && msg.round_result && msg.game_over_data) {
+    document.getElementById('gameOverOverlay').style.display = 'none';
+    renderRoundResult(msg.round_result, {
+      playSound: false,
+      animateReveal: false,
+      finalPhase: 'game_over',
+      gameOverData: msg.game_over_data,
+      preserveStatePoints: true,
+    });
+    restoreActionsFromState();
+    syncSceneAudio();
+    return;
+  }
+  if (msg.phase === 'game_over') {
+    document.getElementById('gameOverOverlay').style.display = 'none';
+    setResultOverlayStaticRestoreMode(true);
+    document.getElementById('resultOverlay').style.display = 'flex';
+    renderMatchOverPanel();
   }
   renderAll();
   restoreActionsFromState();
@@ -605,6 +718,7 @@ function syncPhase2UiFromState() {
 }
 
 function onRoundStart(msg) {
+  setLeavingLobbyFromGameOver(false);
   sound.resetRound();
   sound.play('roundStart');
   state.phase = 'round_start';
@@ -632,6 +746,7 @@ function onRoundStart(msg) {
   state.roundReadySeats = [];
   state.roomPlayers = [];
   state.roomReadyBySeat = {};
+  state.gameOverData = null;
   selectedTile = null;
   actions = {};
   roomAudioState.playerCount = 0;
@@ -640,6 +755,7 @@ function onRoundStart(msg) {
   resetPhase2Ui();
   hideActions();
   document.getElementById('resultOverlay').style.display = 'none';
+  hideMatchOverPanel();
   renderAll();
   syncSceneAudio();
 }
@@ -652,10 +768,12 @@ function onRoomStatus(msg) {
     readyMap[p.seat] = !!p.ready;
   }
   state.roomReadyBySeat = readyMap;
+  state.roomOwnerSeat = Number.isInteger(msg.owner_seat) ? msg.owner_seat : null;
+  state.roomTimerMinutes = Number.isInteger(msg.timer_minutes) ? msg.timer_minutes : state.roomTimerMinutes;
   const myReady = Number.isInteger(state.mySeat) && state.mySeat >= 0 ? !!readyMap[state.mySeat] : false;
   const oppSeat = Number.isInteger(state.mySeat) && state.mySeat >= 0 ? 1 - state.mySeat : null;
   const oppReady = oppSeat !== null ? !!readyMap[oppSeat] : false;
-  const inWaitingRoom = state.phase === 'waiting' && state.roundNumber === 0;
+  const inWaitingRoom = isInWaitingRoom();
 
   if (inWaitingRoom) {
     sound.playBgm('ready', { gain: 1, fadeMs: 180 });
@@ -673,7 +791,9 @@ function onRoomStatus(msg) {
   roomAudioState.playerCount = playerCount;
   roomAudioState.myReady = myReady;
   roomAudioState.oppReady = oppReady;
+  renderSceneMode();
   renderRoomReadyBar();
+  renderMatchOverPanel();
 }
 
 function onDeal(msg) {
@@ -769,10 +889,13 @@ function onCallAvailable(msg) {
   sound.play('actionPrompt');
   state.phase = 'phase1_response';
   // Fallback reconciliation: if discard event is delayed/missed, keep pond UI consistent.
-  ensureDiscardVisible(msg.discard_seat, msg.discard_tile);
+  if (!msg.is_chankan) {
+    ensureDiscardVisible(msg.discard_seat, msg.discard_tile);
+  }
   actions = msg.calls || {};
   actions._discard_tile = msg.discard_tile;
   actions._discard_seat = msg.discard_seat;
+  actions._is_chankan = !!msg.is_chankan;
   renderDiscards();
   renderOpponent();
   renderInfoBar();
@@ -832,7 +955,6 @@ function onCallMade(msg) {
     if (didx >= 0) state.myDiscards.splice(didx, 1);
   }
   renderAll();
-  requestStateSync();
 }
 
 function onKanDeclared(msg) {
@@ -847,7 +969,7 @@ function onKanDeclared(msg) {
         if (idx >= 0) state.myHand.splice(idx, 1);
       }
     } else if (kanType === 'minkan') {
-      state.myMelds.push({ type: kanType, tiles: msg.tiles, called_tile: null });
+      state.myMelds.push({ type: kanType, tiles: msg.tiles, called_tile: msg.called_tile ?? null });
       for (const t of msg.tiles) {
         const idx = state.myHand.indexOf(t);
         if (idx >= 0) state.myHand.splice(idx, 1);
@@ -858,7 +980,12 @@ function onKanDeclared(msg) {
       for (let i = 0; i < state.myMelds.length; i++) {
         const m = state.myMelds[i];
         if (m.type === 'pon' && Math.floor(m.tiles[0] / 4) === tt) {
-          state.myMelds[i] = { type: 'kakan', tiles: msg.tiles, called_tile: m.called_tile };
+          state.myMelds[i] = {
+            type: 'kakan',
+            tiles: msg.tiles,
+            called_tile: msg.called_tile ?? m.called_tile ?? null,
+            added_tile: msg.added_tile ?? msg.tiles[msg.tiles.length - 1],
+          };
           break;
         }
       }
@@ -872,7 +999,7 @@ function onKanDeclared(msg) {
       state.oppMelds.push({ type: kanType, tiles: msg.tiles, called_tile: null });
       state.oppClosedCount = Math.max(0, state.oppClosedCount - 4);
     } else if (kanType === 'minkan') {
-      state.oppMelds.push({ type: kanType, tiles: msg.tiles, called_tile: null });
+      state.oppMelds.push({ type: kanType, tiles: msg.tiles, called_tile: msg.called_tile ?? null });
       state.oppClosedCount = Math.max(0, state.oppClosedCount - 3);
     } else if (kanType === 'kakan') {
       // Upgrade existing pon meld for opponent
@@ -880,7 +1007,12 @@ function onKanDeclared(msg) {
       for (let i = 0; i < state.oppMelds.length; i++) {
         const m = state.oppMelds[i];
         if (m.type === 'pon' && Math.floor(m.tiles[0] / 4) === tt) {
-          state.oppMelds[i] = { type: 'kakan', tiles: msg.tiles, called_tile: m.called_tile };
+          state.oppMelds[i] = {
+            type: 'kakan',
+            tiles: msg.tiles,
+            called_tile: msg.called_tile ?? m.called_tile ?? null,
+            added_tile: msg.added_tile ?? msg.tiles[msg.tiles.length - 1],
+          };
           break;
         }
       }
@@ -888,7 +1020,6 @@ function onKanDeclared(msg) {
     }
   }
   renderAll();
-  requestStateSync();
 }
 
 function onTenpaiDeclared(msg) {
@@ -1076,29 +1207,39 @@ function onRoundReady(msg) {
   renderAll();
 }
 
+function ensureResultHandTrack(container) {
+  let track = container.querySelector('.result-hand-track');
+  if (!track) {
+    track = document.createElement('div');
+    track.className = 'result-hand-track';
+    container.appendChild(track);
+  }
+  return track;
+}
+
 function appendResultHand(container, handData, winningTile = null) {
   if (!handData) return;
 
+  const track = ensureResultHandTrack(container);
+  const resultTileSize = 'mini';
+
   let highlighted = false;
   for (const t of (handData.closed || [])) {
-    const tileEl = createTileElement(t, { size: 'small' });
+    const tileEl = createTileElement(t, { size: resultTileSize });
     if (!highlighted && winningTile !== null && t === winningTile) {
       tileEl.classList.add('winning-tile');
       highlighted = true;
     }
-    container.appendChild(tileEl);
+    track.appendChild(tileEl);
   }
 
   if (handData.melds) {
     for (const meld of handData.melds) {
       const sep = document.createElement('span');
-      sep.style.width = '8px';
-      container.appendChild(sep);
-      for (const t of meld.tiles) {
-        const el = createTileElement(t, { size: 'small' });
-        if (t === meld.called_tile) el.classList.add('rotated');
-        container.appendChild(el);
-      }
+      sep.style.width = '6px';
+      sep.style.flex = '0 0 auto';
+      track.appendChild(sep);
+      track.appendChild(renderMeldGroup(meld, { size: resultTileSize }));
     }
   }
 }
@@ -1137,11 +1278,20 @@ function renderResultIndicators(container, doraIndicators = [], uradoraIndicator
   }
 }
 
-function onRoundResult(msg) {
-  state.phase = 'round_end';
+function renderRoundResult(msg, options = {}) {
+  const {
+    playSound: shouldPlaySound = true,
+    animateReveal = true,
+    preserveRoundReadySeats = false,
+    roundReadySeats = [],
+    finalPhase = 'round_end',
+    gameOverData = null,
+    preserveStatePoints = false,
+  } = options;
+  state.phase = finalPhase;
   state.currentTurn = -1;
   state.phase2DrawCount = 0;
-  state.roundReadySeats = [];
+  state.roundReadySeats = preserveRoundReadySeats ? [...roundReadySeats] : [];
   state.honbaCount = msg.honba_count ?? state.honbaCount;
   state.riichiSticks = msg.riichi_sticks ?? state.riichiSticks;
   actions = {};
@@ -1150,9 +1300,9 @@ function onRoundResult(msg) {
   hideActions();
 
   const resultType = msg.result_type || msg.type;
-  if (resultType === 'tsumo' || resultType === 'ron') {
+  if (shouldPlaySound && (resultType === 'tsumo' || resultType === 'ron')) {
     sound.play(msg.winner === state.mySeat ? 'resultWin' : 'resultLose');
-  } else if (resultType === 'draw') {
+  } else if (shouldPlaySound && resultType === 'draw') {
     sound.play('resultDraw');
   }
   const overlay = document.getElementById('resultOverlay');
@@ -1164,11 +1314,19 @@ function onRoundResult(msg) {
   const score = document.getElementById('resultScore');
   const points = document.getElementById('resultPoints');
 
+  setResultOverlayStaticRestoreMode(!animateReveal);
   hand.innerHTML = '';
   dora.innerHTML = '';
   dora.style.display = 'none';
   yakuList.innerHTML = '';
   resetResultRevealStages();
+  if (finalPhase === 'game_over') {
+    setLeavingLobbyFromGameOver(false);
+    state.gameOverData = gameOverData;
+  } else {
+    hideMatchOverPanel();
+    state.gameOverData = null;
+  }
 
   const resultDoraIndicators = msg.dora_indicators || state.doraIndicators || [];
   const resultUradoraIndicators = msg.uradora_indicators || msg.score?.uradora_indicators || [];
@@ -1315,52 +1473,153 @@ function onRoundResult(msg) {
     points.innerHTML = formatPointsRows(myNewPts, oppNewPts, myDelta, oppDelta);
   }
 
-  box.classList.toggle('compact', yakuList.children.length >= 7 || hand.children.length >= 15);
+  const resultTileCount = hand.querySelectorAll('.tile').length;
+  box.classList.toggle('compact', yakuList.children.length >= 6 || resultTileCount >= 14 || dora.childElementCount >= 2);
 
   // Update points
-  if (msg.points) {
+  if (msg.points && !preserveStatePoints) {
     state.myPoints = myNewPts;
     state.oppPoints = oppNewPts;
   }
 
   overlay.style.display = 'flex';
   renderAll();
-  playResultRevealStages();
+  if (animateReveal) {
+    playResultRevealStages();
+  } else {
+    completeResultRevealStages();
+  }
+}
+
+function onRoundResult(msg) {
+  renderRoundResult(msg, { playSound: true });
 }
 
 function onGameOver(msg) {
+  setLeavingLobbyFromGameOver(false);
   state.phase = 'game_over';
   state.currentTurn = -1;
   state.phase2DrawCount = 0;
   state.roundReadySeats = [];
   state.honbaCount = msg.honba_count ?? state.honbaCount;
   state.riichiSticks = msg.riichi_sticks ?? state.riichiSticks;
+  state.gameOverData = msg;
   actions = {};
   selectedTile = null;
   resetPhase2Ui();
   hideActions();
-  document.getElementById('resultOverlay').style.display = 'none';
-
-  const overlay = document.getElementById('gameOverOverlay');
-  const title = document.getElementById('gameOverTitle');
-  const details = document.getElementById('gameOverDetails');
-
-  const isWinner = msg.winner === state.mySeat;
   sound.stopBgm({ fadeMs: 220 });
-  sound.play(isWinner ? 'gameWin' : 'gameLose');
-  title.textContent = isWinner ? '🎉 你赢了！' : '😞 你输了';
-  title.style.color = isWinner ? 'var(--gold)' : 'var(--red)';
+  sound.play(msg.winner === state.mySeat ? 'gameWin' : 'gameLose');
+  document.getElementById('gameOverOverlay').style.display = 'none';
+  setResultOverlayStaticRestoreMode(false);
+  document.getElementById('resultOverlay').style.display = 'flex';
+  renderMatchOverPanel();
+  renderAll();
+}
 
-  const finalPoints = msg.final_points || {};
+function hideMatchOverPanel() {
+  setLeavingLobbyFromGameOver(false);
+  const panel = document.getElementById('matchOverPanel');
+  const continueBtn = document.getElementById('resultContinue');
+  if (panel) {
+    panel.style.display = 'none';
+  }
+  if (continueBtn) {
+    continueBtn.style.display = 'inline-flex';
+  }
+}
+
+function renderMatchOverPanel() {
+  const panel = document.getElementById('matchOverPanel');
+  const continueBtn = document.getElementById('resultContinue');
+  if (!panel || state.phase !== 'game_over') {
+    hideMatchOverPanel();
+    return;
+  }
+
+  const gameOver = state.gameOverData || {};
+  const winnerSeat = Number.isInteger(gameOver.winner)
+    ? gameOver.winner
+    : ((state.myPoints >= state.oppPoints) ? state.mySeat : (1 - state.mySeat));
+  const isWinner = winnerSeat === state.mySeat;
+  const finalPoints = gameOver.final_points || {};
   const myPts = finalPoints[state.mySeat] ?? state.myPoints;
   const oppPts = finalPoints[1 - state.mySeat] ?? state.oppPoints;
-  details.innerHTML = `
-    <div style="margin:8px 0">你: <span style="color:var(--gold);font-weight:700">${myPts}</span> 点</div>
-    <div style="margin:8px 0">${state.oppName}: <span style="color:var(--gold);font-weight:700">${oppPts}</span> 点</div>
+  const myReady = !!state.roomReadyBySeat[state.mySeat];
+  const oppSeat = state.mySeat >= 0 ? 1 - state.mySeat : null;
+  const oppReady = oppSeat !== null ? !!state.roomReadyBySeat[oppSeat] : false;
+  const playerCount = (state.roomPlayers || []).length;
+  const isOwner = state.roomOwnerSeat === state.mySeat;
+
+  document.getElementById('matchOverTitle').textContent = isWinner ? '本场结束，你获胜' : '本场结束，对手获胜';
+  document.getElementById('matchOverSubtitle').textContent = isOwner
+    ? `你是房主。可将下一场时长调整为 ${state.roomTimerMinutes} 分钟后继续准备。`
+    : `房主将决定下一场时长。当前配置：${state.roomTimerMinutes} 分钟。`;
+  document.getElementById('matchOverPoints').innerHTML = `
+    <div class="match-over-point-row"><span>你</span><strong>${myPts}</strong></div>
+    <div class="match-over-point-row"><span>${state.oppName}</span><strong>${oppPts}</strong></div>
   `;
 
-  overlay.style.display = 'flex';
-  renderAll();
+  const timerField = document.getElementById('matchOverTimerField');
+  const timerInput = document.getElementById('rematchTimerMinutes');
+  const applyBtn = document.getElementById('btnApplyRematchTimer');
+  if (timerInput) {
+    timerInput.value = String(state.roomTimerMinutes || 30);
+    timerInput.disabled = !isOwner;
+  }
+  if (timerField) {
+    timerField.style.display = isOwner ? 'flex' : 'none';
+  }
+  if (applyBtn) {
+    applyBtn.style.display = isOwner ? 'inline-flex' : 'none';
+    applyBtn.disabled = !isOwner;
+  }
+
+  const statusEl = document.getElementById('matchOverStatus');
+  if (playerCount < 2) {
+    statusEl.textContent = '等待对手留在房间后再准备下一场。';
+  } else if (myReady && oppReady) {
+    statusEl.textContent = '双方已准备，正在开下一场...';
+  } else if (myReady) {
+    statusEl.textContent = '已准备，等待对手准备。';
+  } else if (oppReady) {
+    statusEl.textContent = '对手已准备，等待你准备。';
+  } else {
+    statusEl.textContent = isOwner ? '先确认下一场时长，再点准备即可开下一场。' : '等待房主确认时长后，点击准备加入下一场。';
+  }
+
+  const readyBtn = document.getElementById('btnRematchReady');
+  const unreadyBtn = document.getElementById('btnRematchUnready');
+  readyBtn.style.display = myReady ? 'none' : 'inline-flex';
+  unreadyBtn.style.display = myReady ? 'inline-flex' : 'none';
+  renderReturnLobbyButton();
+
+  panel.style.display = 'flex';
+  if (continueBtn) {
+    continueBtn.style.display = 'none';
+  }
+}
+
+function applyRematchTimer() {
+  const input = document.getElementById('rematchTimerMinutes');
+  const minutes = parseInt(input?.value || '', 10);
+  if (!Number.isInteger(minutes) || minutes < 5 || minutes > 180) {
+    showToast('下一场时长需在 5 到 180 分钟之间');
+    return;
+  }
+  send({ type: 'room_set_timer', timer_minutes: minutes });
+}
+
+function returnToLobbyFromGameOver() {
+  if (isLeavingLobbyFromGameOver) return;
+  sound.play('uiCancel');
+  setLeavingLobbyFromGameOver(true);
+  send({ type: 'leave_room' });
+  leaveLobbyPendingTimer = setTimeout(() => {
+    if (!isLeavingLobbyFromGameOver) return;
+    setLeavingLobbyFromGameOver(false);
+    showToast('退出房间超时，请重试');
+  }, 4000);
 }
 
 function confirmNextRound() {
@@ -1382,6 +1641,12 @@ function clearResultRevealTimers() {
   resultRevealTimers = [];
 }
 
+function setResultOverlayStaticRestoreMode(isStatic) {
+  const overlay = document.getElementById('resultOverlay');
+  if (!overlay) return;
+  overlay.classList.toggle('result-restore-static', !!isStatic);
+}
+
 function resetResultRevealStages() {
   clearResultRevealTimers();
   const title = document.getElementById('resultTitle');
@@ -1394,6 +1659,26 @@ function resetResultRevealStages() {
     el.classList.remove('reveal-in', 'result-stage', 'result-title-stage');
     el.style.transitionDelay = '0ms';
   }
+}
+
+function completeResultRevealStages() {
+  clearResultRevealTimers();
+  const title = document.getElementById('resultTitle');
+  const yakuList = document.getElementById('resultYaku');
+  const score = document.getElementById('resultScore');
+  const points = document.getElementById('resultPoints');
+  const stages = [title, yakuList, score, points];
+
+  stages.forEach((el, index) => {
+    if (!el) return;
+    el.classList.add('result-stage', 'reveal-in');
+    if (index === 0) {
+      el.classList.add('result-title-stage');
+    } else {
+      el.classList.remove('result-title-stage');
+    }
+    el.style.transitionDelay = '0ms';
+  });
 }
 
 function playResultRevealStages() {
@@ -1418,6 +1703,7 @@ function playResultRevealStages() {
 
 // ====================== Rendering ======================
 function renderAll() {
+  renderSceneMode();
   renderInfoBar();
   renderDora();
   renderOpponent();
@@ -1427,16 +1713,49 @@ function renderAll() {
   renderWaitingTiles();
   renderTimer();
   renderTurnIndicator();
-  renderLeaveWaitingRoomButton();
   renderRoomReadyBar();
   renderRoundReadyBar();
+  renderMatchOverPanel();
 }
 
-function renderLeaveWaitingRoomButton() {
-  const btn = document.getElementById('btnLeaveWaitingRoom');
-  if (!btn) return;
-  const canLeave = state.phase === 'waiting' && state.roundNumber === 0;
-  btn.style.display = canLeave ? 'inline-block' : 'none';
+function renderSceneMode() {
+  const app = document.getElementById('app');
+  if (!app) return;
+
+  const inWaitingRoom = isInWaitingRoom();
+  app.classList.toggle('waiting-room-scene', inWaitingRoom);
+  renderRoomSeatStatus(inWaitingRoom);
+}
+
+function renderRoomSeatStatus(inWaitingRoom = isInWaitingRoom()) {
+  const myStatus = document.getElementById('myRoomStatus');
+  const oppStatus = document.getElementById('oppRoomStatus');
+  if (!myStatus || !oppStatus) return;
+
+  const setStatus = (el, text, variant, visible) => {
+    el.textContent = text;
+    el.className = `room-status-badge ${variant}`;
+    el.style.display = visible ? 'inline-flex' : 'none';
+  };
+
+  if (!inWaitingRoom) {
+    setStatus(myStatus, '', '', false);
+    setStatus(oppStatus, '', '', false);
+    return;
+  }
+
+  const mySeatKnown = Number.isInteger(state.mySeat) && state.mySeat >= 0;
+  const myReady = mySeatKnown ? !!state.roomReadyBySeat[state.mySeat] : false;
+  const oppSeat = mySeatKnown ? 1 - state.mySeat : null;
+  const oppJoined = oppSeat !== null && (state.roomPlayers || []).some(player => player.seat === oppSeat);
+  const oppReady = oppJoined ? !!state.roomReadyBySeat[oppSeat] : false;
+
+  setStatus(myStatus, myReady ? '已准备' : '未准备', myReady ? 'is-ready' : 'is-pending', true);
+  if (!oppJoined) {
+    setStatus(oppStatus, '等待加入', 'is-ghost', true);
+    return;
+  }
+  setStatus(oppStatus, oppReady ? '已准备' : '未准备', oppReady ? 'is-ready' : 'is-pending', true);
 }
 
 function leaveWaitingRoom() {
@@ -1456,7 +1775,7 @@ function renderRoomReadyBar() {
   const btnUnready = document.getElementById('btnRoomUnready');
   if (!bar || !text || !btnReady || !btnUnready) return;
 
-  const inWaitingRoom = state.phase === 'waiting' && state.roundNumber === 0;
+  const inWaitingRoom = isInWaitingRoom();
   bar.style.display = inWaitingRoom ? 'flex' : 'none';
   if (!inWaitingRoom) return;
 
@@ -1467,8 +1786,10 @@ function renderRoomReadyBar() {
 
   if (playerCount < 2) {
     text.textContent = '已进入房间，等待对手加入...';
+  } else if (myReady && oppReady) {
+    text.textContent = '双方已准备，正在开始对局...';
   } else {
-    text.textContent = `准备状态：你${myReady ? '已准备' : '未准备'} / 对手${oppReady ? '已准备' : '未准备'}`;
+    text.textContent = '双方准备后将自动开始对局';
   }
 
   btnReady.style.display = myReady ? 'none' : 'inline-block';
@@ -1747,32 +2068,179 @@ function renderMelds() {
   oppContainer.innerHTML = '';
 
   for (const m of state.myMelds) {
-    myContainer.appendChild(renderMeldGroup(m));
+    myContainer.appendChild(renderMeldGroup(m, { size: 'small', perspective: 'self' }));
   }
   for (const m of state.oppMelds) {
-    oppContainer.appendChild(renderMeldGroup(m));
+    oppContainer.appendChild(renderMeldGroup(m, { size: 'small', perspective: 'opponent' }));
   }
 }
 
-function renderMeldGroup(meld) {
+function getKakanAddedTile(meld) {
+  if (!meld) return null;
+  if (typeof meld.added_tile === 'number') {
+    return meld.added_tile;
+  }
+  if (Array.isArray(meld.tiles) && meld.tiles.length === 4) {
+    return meld.tiles[meld.tiles.length - 1];
+  }
+  return null;
+}
+
+function getMeldBaseTiles(meld) {
+  if (!meld || !Array.isArray(meld.tiles)) {
+    return [];
+  }
+  if (meld.type !== 'kakan') {
+    return [...meld.tiles];
+  }
+
+  const addedTile = getKakanAddedTile(meld);
+  if (typeof addedTile !== 'number') {
+    return [...meld.tiles];
+  }
+
+  let removed = false;
+  return meld.tiles.filter((tile) => {
+    if (!removed && tile === addedTile) {
+      removed = true;
+      return false;
+    }
+    return true;
+  });
+}
+
+function appendMeldSlot(group, tileId, options = {}) {
+  const slot = document.createElement('div');
+  slot.className = 'meld-slot';
+  if (options.slotClassName) {
+    slot.classList.add(...options.slotClassName.split(' ').filter(Boolean));
+  }
+
+  const tileEl = createTileElement(tileId, {
+    size: options.size || 'small',
+    rotated: !!options.rotated,
+  });
+  if (options.tileClassName) {
+    tileEl.classList.add(...options.tileClassName.split(' ').filter(Boolean));
+  }
+
+  slot.appendChild(tileEl);
+  group.appendChild(slot);
+  return { slot, tileEl };
+}
+
+function moveCalledTileToCenter(tiles, calledTile) {
+  if (!Array.isArray(tiles) || typeof calledTile !== 'number') {
+    return Array.isArray(tiles) ? [...tiles] : [];
+  }
+
+  const calledIndex = tiles.indexOf(calledTile);
+  if (calledIndex < 0) {
+    return [...tiles];
+  }
+
+  const remaining = tiles.filter((_, index) => index !== calledIndex);
+  if (remaining.length === 2) {
+    return [remaining[0], calledTile, remaining[1]];
+  }
+  if (remaining.length === 3) {
+    return [remaining[0], calledTile, remaining[1], remaining[2]];
+  }
+  return [...tiles];
+}
+
+function getOpenMeldDisplayTiles(meld) {
+  if (!meld) return [];
+
+  const baseTiles = meld.type === 'kakan'
+    ? getMeldBaseTiles(meld)
+    : Array.isArray(meld.tiles) ? [...meld.tiles] : [];
+  const calledTile = typeof meld.called_tile === 'number' ? meld.called_tile : null;
+
+  if (calledTile === null) {
+    return baseTiles;
+  }
+  if (meld.type === 'chi') {
+    return baseTiles;
+  }
+  if (meld.type === 'pon' || meld.type === 'minkan' || meld.type === 'kakan') {
+    return moveCalledTileToCenter(baseTiles, calledTile);
+  }
+  return baseTiles;
+}
+
+function renderStandardOpenMeld(group, meld, size) {
+  for (const tileId of getOpenMeldDisplayTiles(meld)) {
+    appendMeldSlot(group, tileId, {
+      size,
+      rotated: typeof meld.called_tile === 'number' && tileId === meld.called_tile,
+    });
+  }
+}
+
+function renderAnkanMeld(group, meld, size) {
+  const concealedIndexes = new Set([0, 3]);
+  for (let index = 0; index < (meld.tiles || []).length; index++) {
+    if (concealedIndexes.has(index)) {
+      appendMeldSlot(group, null, { size, slotClassName: 'meld-slot-concealed' });
+      continue;
+    }
+    appendMeldSlot(group, meld.tiles[index], { size });
+  }
+}
+
+function renderKakanMeld(group, meld, size) {
+  const calledTile = typeof meld.called_tile === 'number' ? meld.called_tile : null;
+  const addedTile = getKakanAddedTile(meld);
+  const baseTiles = getOpenMeldDisplayTiles(meld);
+
+  if (calledTile === null || typeof addedTile !== 'number' || baseTiles.length !== 3) {
+    renderStandardOpenMeld(group, meld, size);
+    return;
+  }
+
+  let stacked = false;
+  for (const tileId of baseTiles) {
+    if (!stacked && tileId === calledTile) {
+      const { slot } = appendMeldSlot(group, tileId, {
+        size,
+        rotated: true,
+        slotClassName: 'meld-stack-slot',
+        tileClassName: 'meld-called-base',
+      });
+      const addedTileEl = createTileElement(addedTile, { size });
+      addedTileEl.classList.add('meld-added-tile');
+      slot.appendChild(addedTileEl);
+      stacked = true;
+      continue;
+    }
+    appendMeldSlot(group, tileId, { size });
+  }
+
+  if (!stacked) {
+    group.innerHTML = '';
+    renderStandardOpenMeld(group, meld, size);
+  }
+}
+
+function renderMeldGroup(meld, options = {}) {
+  const size = options.size || 'small';
+  const perspective = options.perspective || 'neutral';
   const group = document.createElement('div');
   group.className = 'meld-group';
+  if (meld?.type) {
+    group.classList.add(`meld-${meld.type}`);
+  }
+  if (perspective !== 'neutral') {
+    group.classList.add(`meld-perspective-${perspective}`);
+  }
 
   if (meld.type === 'ankan') {
-    // [R2-2] Ankan: first & last face-down, middle two face-up
-    for (let i = 0; i < meld.tiles.length; i++) {
-      if (i === 0 || i === 3) {
-        group.appendChild(createTileElement(null, { size: 'small' }));
-      } else {
-        group.appendChild(createTileElement(meld.tiles[i], { size: 'small' }));
-      }
-    }
+    renderAnkanMeld(group, meld, size);
+  } else if (meld.type === 'kakan') {
+    renderKakanMeld(group, meld, size);
   } else {
-    for (const t of meld.tiles) {
-      const opts = { size: 'small' };
-      if (t === meld.called_tile) opts.rotated = true;
-      group.appendChild(createTileElement(t, opts));
-    }
+    renderStandardOpenMeld(group, meld, size);
   }
   return group;
 }
@@ -1812,7 +2280,7 @@ function showActions() {
   document.getElementById('btnTsumo').style.display = actions.can_tsumo ? '' : 'none';
   document.getElementById('btnRiichi').style.display = actions.can_declare_riichi ? '' : 'none';
   document.getElementById('btnTenpai').style.display = actions.can_declare_tenpai ? '' : 'none';
-  document.getElementById('btnTenpai').textContent = actions.can_declare_damaten ? '默听' : '宣告听牌';
+  document.getElementById('btnTenpai').textContent = actions.can_declare_damaten ? '宣告默听' : '宣告听牌';
   document.getElementById('btnPass').style.display = 'none';
 
   // Kan options
@@ -1965,9 +2433,9 @@ function getDeclarerDiscardTypes() {
 
 function getGuessSystemDisabledTypes(alreadyGuessed = state.phase2GuessedTypes || []) {
   const guessed = new Set(alreadyGuessed || []);
-  const discarded = getDeclarerDiscardTypes();
-  const blocked = new Set([...guessed, ...discarded]);
-  return { guessed, discarded, blocked };
+  const declarerDiscarded = getDeclarerDiscardTypes();
+  const blocked = new Set([...guessed]);
+  return { guessed, declarerDiscarded, blocked };
 }
 
 function getGuessSelectableTypes(alreadyGuessed = state.phase2GuessedTypes || []) {
@@ -2019,12 +2487,12 @@ function updateGuessPanelMeta() {
   skipBtn.style.display = requiredCount === 0 ? '' : 'none';
   skipBtn.disabled = requiredCount !== 0;
   subtitleEl.textContent = guessMode === 'mark'
-    ? '标记仅对你自己可见，再点一次即可撤回。'
+    ? '手动排除仅对你自己生效，再点一次即可取消。'
     : (requiredCount === 0
       ? '系统已无可选牌，可直接跳过本轮猜牌。'
       : (requiredCount === 1
-        ? '系统会禁用已猜过和听牌者已打出的牌。当前只剩1张可选。'
-        : '系统会禁用已猜过和听牌者已打出的牌。'));
+        ? '系统只锁定已猜过的牌。当前只剩1张可选；宣听者已打出的牌仍可选择。'
+        : '系统只锁定已猜过的牌；宣听者已打出的牌仍可选择。'));
   toggleBtn.textContent = guessPanelMinimized ? '展开' : '最小化';
   selectBtn.classList.toggle('active', guessMode === 'select');
   markBtn.classList.toggle('active', guessMode === 'mark');
@@ -2036,7 +2504,7 @@ function renderGuessTiles() {
   container.innerHTML = '';
   normalizeGuessUiState();
 
-  const { guessed, discarded, blocked } = getGuessSystemDisabledTypes();
+  const { guessed, declarerDiscarded, blocked } = getGuessSystemDisabledTypes();
   const groups = [
     { label: '万子', start: 0, end: 9 },
     { label: '筒子', start: 9, end: 18 },
@@ -2057,7 +2525,7 @@ function renderGuessTiles() {
     tilesRow.className = 'guess-suit-tiles';
     for (let tt = g.start; tt < g.end; tt++) {
       const isGuessed = guessed.has(tt);
-      const isDiscarded = discarded.has(tt);
+      const isDiscarded = declarerDiscarded.has(tt);
       const isMarked = guessMarked.has(tt);
       const isSelected = guessSelected.has(tt);
       const el = createTileTypeElement(tt, { size: 'small', clickable: !blocked.has(tt) });
@@ -2069,20 +2537,20 @@ function renderGuessTiles() {
         el.classList.add('guessed');
       }
       if (isDiscarded) {
-        el.classList.add('discard-blocked');
+        el.classList.add('declarer-discarded');
       }
       if (isMarked) {
         el.classList.add('marked');
       }
 
       if (isGuessed && isDiscarded) {
-        el.title = '已猜过，且宣听者已打出';
+        el.title = '已猜过，且宣听者曾打出过这张牌';
       } else if (isGuessed) {
-        el.title = '已猜过';
+        el.title = '已猜过，系统已锁定';
       } else if (isDiscarded) {
-        el.title = '宣听者已打出';
+        el.title = '宣听者已打出过这张牌，但仍可选择';
       } else if (isMarked) {
-        el.title = '你标记为可排除，再点一次可撤回';
+        el.title = '你已手动排除，再点一次可取消排除';
       } else if (guessMode === 'mark') {
         el.title = '点击切换排除标记';
       } else {
@@ -2139,6 +2607,9 @@ function handleGuessTileClick(tt) {
   }
 
   if (guessMarked.has(tt)) {
+    sound.play('uiTap');
+    guessMarked.delete(tt);
+    renderGuessTiles();
     return;
   }
   if (guessSelected.has(tt)) {

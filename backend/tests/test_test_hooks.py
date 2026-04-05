@@ -221,3 +221,62 @@ def test_setup_controlled_phase1_action_supports_red_dora_draw():
     assert room.engine.phase.value == 'phase1_action'
 
     room_manager.reset()
+
+
+def test_setup_controlled_phase1_action_can_seed_melds_and_existing_kans():
+    room = room_manager.create_room()
+    room.add_player(1, 'p1', object())
+    room.add_player(2, 'p2', object())
+
+    req = Phase1ActionStateRequest(
+        actor_closed=['1p', '2p', '3p', '1s', '2s', '3s'],
+        actor_melds=[
+            {'type': 'ankan', 'tiles': ['东', '东', '东', '东']},
+            {'type': 'pon', 'tiles': ['5m', '5m', '5m'], 'called_index': 2},
+        ],
+        actor_draw='5m',
+        opponent_closed=['7m', '8m', '9m', '白', '发'],
+        opponent_melds=[
+            {'type': 'ankan', 'tiles': ['南', '南', '南', '南']},
+            {'type': 'ankan', 'tiles': ['西', '西', '西', '西']},
+        ],
+        dora_indicator='6p',
+    )
+
+    scenario = _setup_controlled_phase1_action(room.engine, 0, req)
+
+    assert scenario['actions']['can_kakan']
+    assert len(room.engine.players[0].hand.closed) == 7
+    assert room.engine.players[0].hand.draw_tile is not None
+    assert len(room.engine.players[0].hand.melds) == 2
+    assert room.engine.players[0].hand.melds[1].meld_type.value == 'pon'
+    assert room.engine._total_kan_count == 3
+
+    room_manager.reset()
+
+
+def test_setup_controlled_phase2_counts_seeded_kans():
+    room = room_manager.create_room()
+    room.add_player(1, 'p1', object())
+    room.add_player(2, 'p2', object())
+
+    req = Phase2GuessRequest(
+        already_guessed=[],
+        tenpai_declarer=0,
+        declarer_closed=['1p', '2p', '3p', '1s', '2s', '3s', '东', '东', '东', '4m'],
+        declarer_melds=[{'type': 'pon', 'tiles': ['5m', '5m', '5m'], 'called_index': 2}],
+        guesser_closed=['7m', '8m', '9m', '白', '发'],
+        guesser_melds=[
+            {'type': 'ankan', 'tiles': ['南', '南', '南', '南']},
+            {'type': 'ankan', 'tiles': ['西', '西', '西', '西']},
+        ],
+        wall_draw_sequence=['5m', '9p', '9s', '北', '中', '7p'],
+        dora_indicator='6p',
+        rinshan_sequence=['1m'],
+    )
+
+    _setup_controlled_phase2(room.engine, 1, 0, req)
+
+    assert room.engine._total_kan_count == 2
+
+    room_manager.reset()

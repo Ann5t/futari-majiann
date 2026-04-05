@@ -145,6 +145,23 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
                 await send_room_status(room)
 
+            elif msg_type == "room_set_timer":
+                room = room_manager.get_player_room(user_id)
+                if room is None:
+                    await websocket.send_json({"type": "error", "message": "你不在任何房间"})
+                    continue
+
+                timer = data.get("timer_minutes")
+                if not isinstance(timer, int) or timer < 5 or timer > 180:
+                    await websocket.send_json({"type": "error", "message": "对局时长需在 5 到 180 分钟之间"})
+                    continue
+
+                if not room.set_timer_minutes(user_id, timer):
+                    await websocket.send_json({"type": "error", "message": "只有房主能在当前阶段修改时长"})
+                    continue
+
+                await send_room_status(room)
+
             elif msg_type == "leave_room":
                 room = room_manager.get_player_room(user_id)
                 if room is None:
